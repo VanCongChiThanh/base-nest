@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4;">
+  <div style="max-width: 600px; margin: 20px auto; padding: 0; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+    {{> header title="Verify Email" color="#4F46E5"}}
+    <div style="padding: 30px; background: #ffffff;">
+      <p style="margin: 0 0 16px;">Hello,</p>
+      <p style="margin: 0 0 16px;">Thank you for registering an account. Please click the button below to verify your email:</p>
+      {{> button url=verifyUrl text="Verify Email" color="#4F46E5"}}
+      <p style="margin: 0 0 16px;">Or copy and paste the following link into your browser:</p>
+      <p style="word-break: break-all; color: #666; font-size: 14px; margin: 0 0 16px;">{{verifyUrl}}</p>
+      <p style="margin: 0 0 16px;">This link will expire in 24 hours.</p>
+    </div>
+    {{> footer}}
+  </div>
+</body>
+</html>
