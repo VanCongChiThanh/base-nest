@@ -4,9 +4,11 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
 import { Role } from '../../../common/enums';
 import { Exclude } from 'class-transformer';
+import { UserProvider } from '../../auth/entities';
 
 @Entity('users')
 export class User {
@@ -36,11 +38,12 @@ export class User {
   @Column({ name: 'is_email_verified', default: false })
   isEmailVerified: boolean;
 
-  @Column({ name: 'google_id', nullable: true, unique: true })
-  googleId: string;
-
   @Column({ name: 'avatar_url', nullable: true })
   avatarUrl: string;
+
+  @OneToMany(() => UserProvider, (provider) => provider.user)
+  @Exclude()
+  providers: UserProvider[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

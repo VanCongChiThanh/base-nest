@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Inject, Injectable } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import { PresignedUrlDto, PresignedUrlResponseDto } from './dto';
 import { UPLOAD_ERRORS, BadRequestException } from '../../common';
+import awsConfig from '../../config/aws.config';
 
 @Injectable()
 export class UploadService {
@@ -26,17 +27,18 @@ export class UploadService {
   // max file size 10MB
   private readonly maxFileSize = 10 * 1024 * 1024;
 
-  constructor(private readonly configService: ConfigService) {
-    this.region =
-      this.configService.get<string>('aws.region') || 'ap-southeast-1';
-    this.bucketName = this.configService.get<string>('aws.s3Bucket') || '';
+  constructor(
+    @Inject(awsConfig.KEY)
+    private readonly awsConf: ConfigType<typeof awsConfig>,
+  ) {
+    this.region = this.awsConf.region;
+    this.bucketName = this.awsConf.s3Bucket || '';
 
     this.s3Client = new S3Client({
       region: this.region,
       credentials: {
-        accessKeyId: this.configService.get<string>('aws.accessKeyId') || '',
-        secretAccessKey:
-          this.configService.get<string>('aws.secretAccessKey') || '',
+        accessKeyId: this.awsConf.accessKeyId || '',
+        secretAccessKey: this.awsConf.secretAccessKey || '',
       },
     });
   }

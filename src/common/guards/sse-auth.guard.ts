@@ -3,11 +3,13 @@ import {
   CanActivate,
   ExecutionContext,
   UnauthorizedException,
+  Inject,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
+import type { ConfigType } from '@nestjs/config';
 import { UserService } from '../../modules/user/user.service';
 import { AUTH_ERRORS, USER_ERRORS } from '../constants';
+import jwtConfig from '../../config/jwt.config';
 
 /**
  * Guard for SSE - get token from query param
@@ -17,7 +19,8 @@ import { AUTH_ERRORS, USER_ERRORS } from '../constants';
 export class SseAuthGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
+    @Inject(jwtConfig.KEY)
+    private readonly jwtConf: ConfigType<typeof jwtConfig>,
     private readonly userService: UserService,
   ) {}
 
@@ -35,7 +38,7 @@ export class SseAuthGuard implements CanActivate {
 
     try {
       const payload = this.jwtService.verify(token, {
-        secret: this.configService.get<string>('jwt.accessSecret'),
+        secret: this.jwtConf.accessSecret,
       });
 
       const user = await this.userService.findById(payload.sub);

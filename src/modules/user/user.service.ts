@@ -8,6 +8,7 @@ import {
   USER_ERRORS,
   NotFoundException,
   ConflictException,
+  AuthProvider,
 } from '../../common';
 
 @Injectable()
@@ -56,10 +57,18 @@ export class UserService {
   }
 
   /**
-   * Find user by Google ID
+   * Find user by social provider account
    */
-  async findByGoogleId(googleId: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { googleId } });
+  async findByProvider(
+    provider: AuthProvider,
+    providerId: string,
+  ): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: {
+        providers: { provider, providerId },
+      },
+      relations: ['providers'],
+    });
   }
 
   /**
@@ -92,6 +101,82 @@ export class UserService {
   async findAllIds(): Promise<string[]> {
     const users = await this.userRepository.find({ select: ['id'] });
     return users.map((u) => u.id);
+  }
+
+  /**
+   * Find all users with pagination, search, and filters (Admin)
+   */
+  async findAll(options: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    role?: string;
+    isEmailVerified?: boolean;
+    sortBy?: string;
+    sortOrder?: 'ASC' | 'DESC';
+  }): Promise<{ data: User[]; total: number; page: number; limit: number }> {
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      role,
+      isEmailVerified,
+      sortBy = 'createdAt',
+      sortOrder = 'DESC',
+    } = options;
+
+    const qb = this.userRepository.createQueryBuilder('user');
+
+    if (search) {
+      qb.where(
+        '(user.email ILIKE :search OR user.firstName ILIKE :search OR user.lastName ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    if (role) {
+      qb.andWhere('user.role = :role', { role });
+    }
+
+    if (isEmailVerified !== undefined) {
+      qb.andWhere('user.isEmailVerified = :isEmailVerified', {
+        isEmailVerified,
+      });
+    }
+
+    const allowedSortFields = [
+      'createdAt',
+      'email',
+      'firstName',
+      'lastName',
+      'role',
+    ];
+    const safeSortBy = allowedSortFields.includes(sortBy)
+      ? sortBy
+      : 'createdAt';
+
+    qb.orderBy(`user.${safeSortBy}`, sortOrder);
+    qb.skip((page - 1) * limit).take(limit);
+
+    const [data, total] = await qb.getManyAndCount();
+    return { data, total, page, limit };
+  }
+
+  /**
+   * Update user role (Admin)
+   */
+  async updateRole(id: string, role: string): Promise<User> {
+    const user = await this.findById(id);
+    user.role = role as any;
+    return this.userRepository.save(user);
+  }
+
+  /**
+   * Delete user (Admin)
+   */
+  async delete(id: string): Promise<void> {
+    const user = await this.findById(id);
+    await this.userRepository.remove(user);
   }
   /**
    * Find user by verification token

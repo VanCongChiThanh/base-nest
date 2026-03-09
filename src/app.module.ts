@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
+import { ConfigType } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_GUARD } from '@nestjs/core';
 
@@ -22,6 +23,7 @@ import { AuthModule } from './modules/auth';
 import { NotificationModule } from './modules/notification';
 import { UploadModule } from './modules/upload';
 import { MailModule } from './modules/mail';
+import { RedisModule } from './modules/redis';
 
 @Module({
   imports: [
@@ -40,22 +42,22 @@ import { MailModule } from './modules/mail';
 
     // TypeORM Module - Database connection
     TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres' as const,
-        host: configService.get<string>('database.host'),
-        port: configService.get<number>('database.port'),
-        username: configService.get<string>('database.username'),
-        password: configService.get<string>('database.password'),
-        database: configService.get<string>('database.database'),
+      inject: [databaseConfig.KEY],
+      useFactory: (dbConf: ConfigType<typeof databaseConfig>) => ({
+        type: dbConf.type,
+        host: dbConf.host,
+        port: dbConf.port,
+        username: dbConf.username,
+        password: dbConf.password,
+        database: dbConf.database,
         autoLoadEntities: true,
-        synchronize: configService.get<string>('NODE_ENV') !== 'production',
-        logging: false,
+        synchronize: dbConf.synchronize,
+        logging: dbConf.logging,
       }),
     }),
 
     // Feature Modules
+    RedisModule,
     UserModule,
     AuthModule,
     NotificationModule,

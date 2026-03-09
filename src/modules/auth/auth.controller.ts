@@ -1,14 +1,4 @@
-import {
-  Controller,
-  Post,
-  Body,
-  UseGuards,
-  Get,
-  Query,
-  Res,
-} from '@nestjs/common';
-import type { Request, Response } from 'express';
-import { ConfigService } from '@nestjs/config';
+import { Controller, Post, Body, UseGuards, Get, Query } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import {
   RegisterDto,
@@ -17,16 +7,13 @@ import {
   ResetPasswordDto,
   TokenResponseDto,
 } from './dto';
-import { LocalAuthGuard, JwtRefreshGuard, GoogleAuthGuard } from './guards';
+import { LocalAuthGuard, JwtRefreshGuard } from './guards';
 import { Public, CurrentUser } from '../../common/decorators';
 import { User } from '../user/entities';
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly authService: AuthService,
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
   /**
    * POST /auth/register - Register a new account
@@ -113,30 +100,13 @@ export class AuthController {
   }
 
   /**
-   * GET /auth/google - Redirect to google for authentication
+   * POST /auth/google/id-token - Verify Google ID token from popup/One Tap
    */
   @Public()
-  @UseGuards(GoogleAuthGuard)
-  @Get('google')
-  async googleAuth() {
-    // Guard will redirect to google
-  }
-
-  /**
-   * GET /auth/google/callback - Callback from google
-   */
-  @Public()
-  @UseGuards(GoogleAuthGuard)
-  @Get('google/callback')
-  async googleAuthCallback(@CurrentUser() user: User, @Res() res: Response) {
-    // Handle Google user and create tokens
-    const validatedUser = await this.authService.validateGoogleUser(user);
-    const tokens = await this.authService.login(validatedUser);
-
-    // Redirect to frontend with tokens
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
-    const redirectUrl = `${frontendUrl}/auth/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`;
-
-    res.redirect(redirectUrl);
+  @Post('google/id-token')
+  async googleIdTokenLogin(
+    @Body('idToken') idToken: string,
+  ): Promise<TokenResponseDto> {
+    return this.authService.verifyGoogleIdToken(idToken);
   }
 }

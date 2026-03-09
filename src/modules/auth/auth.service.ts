@@ -1,34 +1,46 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
+import type { ConfigType } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import Redis from 'ioredis';
+import { OAuth2Client } from 'google-auth-library';
 import { UserService } from '../user/user.service';
 import { User } from '../user/entities';
+import { UserProvider } from './entities';
 import { RegisterDto, TokenResponseDto } from './dto';
 import { MailService } from '../mail/mail.service';
+import { REDIS_CLIENT } from '../redis';
+import jwtConfig from '../../config/jwt.config';
+import googleConfig from '../../config/google.config';
 import {
   UnauthorizedException,
   BadRequestException,
   AUTH_ERRORS,
+  AuthProvider,
 } from '../../common';
 
 @Injectable()
 export class AuthService {
-  private readonly redis: Redis;
+  private readonly googleClient: OAuth2Client;
 
   constructor(
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
     private readonly mailService: MailService,
+    @InjectRepository(UserProvider)
+    private readonly userProviderRepository: Repository<UserProvider>,
+    @Inject(REDIS_CLIENT)
+    private readonly redis: Redis,
+    @Inject(jwtConfig.KEY)
+    private readonly jwtConf: ConfigType<typeof jwtConfig>,
+    @Inject(googleConfig.KEY)
+    private readonly googleConf: ConfigType<typeof googleConfig>,
   ) {
-    // Initialize Redis connection
-    this.redis = new Redis({
-      host: this.configService.get<string>('redis.host') || 'localhost',
-      port: this.configService.get<number>('redis.port') || 6379,
-    });
+    // Initialize Google OAuth2 client for ID token verification
+    this.googleClient = new OAuth2Client(this.googleConf.clientId);
   }
 
   /**
@@ -42,6 +54,9 @@ export class AuthService {
       firstName: registerDto.firstName,
       lastName: registerDto.lastName,
     });
+
+    // Link local provider
+    await this.linkProvider(user.id, AuthProvider.LOCAL, user.id);
 
     // Create verification token
     const verificationToken = uuidv4();
@@ -107,6 +122,36 @@ export class AuthService {
   }
 
   /**
+   * Verify Google ID token (from popup/One Tap) and login/register user
+   */
+  async verifyGoogleIdToken(idToken: string): Promise<TokenResponseDto> {
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: this.googleConf.clientId,
+      });
+
+      const payload = ticket.getPayload();
+      if (!payload || !payload.email) {
+        throw new UnauthorizedException(AUTH_ERRORS.AUTH_INVALID_CREDENTIALS);
+      }
+
+      const user = await this.validateGoogleUser({
+        googleId: payload.sub,
+        email: payload.email,
+        firstName: payload.given_name || '',
+        lastName: payload.family_name || '',
+        avatarUrl: payload.picture || null,
+      });
+
+      return this.login(user);
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
+      throw new UnauthorizedException(AUTH_ERRORS.AUTH_INVALID_CREDENTIALS);
+    }
+  }
+
+  /**
    * Validate Google user and register/login accordingly
    */
   async validateGoogleUser(googleUser: {
@@ -116,41 +161,85 @@ export class AuthService {
     lastName: string;
     avatarUrl: string | null;
   }): Promise<User> {
-    // Find user by Google ID
-    let user = await this.userService.findByGoogleId(googleUser.googleId);
+    return this.validateSocialUser(AuthProvider.GOOGLE, {
+      providerId: googleUser.googleId,
+      email: googleUser.email,
+      firstName: googleUser.firstName,
+      lastName: googleUser.lastName,
+      avatarUrl: googleUser.avatarUrl,
+    });
+  }
+
+  /**
+   * Generic social login: find or create user by social provider
+   * Easily extensible for Facebook, GitHub, etc.
+   */
+  async validateSocialUser(
+    provider: AuthProvider,
+    socialUser: {
+      providerId: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      avatarUrl: string | null;
+    },
+  ): Promise<User> {
+    // 1. Find existing social account link
+    let user = await this.userService.findByProvider(
+      provider,
+      socialUser.providerId,
+    );
 
     if (user) {
       return user;
     }
 
-    // Find user by email
-    user = await this.userService.findByEmail(googleUser.email);
+    // 2. Find user by email
+    user = await this.userService.findByEmail(socialUser.email);
 
     if (user) {
-      // Link Google account with the current user
+      // Link social account with the existing user
+      await this.linkProvider(user.id, provider, socialUser.providerId);
       await this.userService.updateInternal(user.id, {
-        googleId: googleUser.googleId,
-        avatarUrl: googleUser.avatarUrl || undefined,
-        isEmailVerified: true, // Email from Google is verified
+        avatarUrl: socialUser.avatarUrl || undefined,
+        isEmailVerified: true,
       });
       return this.userService.findById(user.id);
     }
 
-    // Tạo user mới với email đã verified
+    // 3. Create new user with verified email
     const newUser = await this.userService.create({
-      email: googleUser.email,
-      firstName: googleUser.firstName,
-      lastName: googleUser.lastName,
-      googleId: googleUser.googleId,
-      avatarUrl: googleUser.avatarUrl || undefined,
+      email: socialUser.email,
+      firstName: socialUser.firstName,
+      lastName: socialUser.lastName,
+      avatarUrl: socialUser.avatarUrl || undefined,
     });
 
-    // Mark email as verified for Google users
+    // Link social account
+    await this.linkProvider(newUser.id, provider, socialUser.providerId);
+
+    // Mark email as verified for social users
     await this.userService.updateInternal(newUser.id, {
       isEmailVerified: true,
     });
 
     return this.userService.findById(newUser.id);
+  }
+
+  /**
+   * Link a social account to a user
+   */
+  private async linkProvider(
+    userId: string,
+    provider: AuthProvider,
+    providerId: string,
+  ): Promise<UserProvider> {
+    const userProvider = this.userProviderRepository.create({
+      userId,
+      provider,
+      providerId,
+    });
+    return this.userProviderRepository.save(userProvider);
   }
 
   /**
@@ -188,7 +277,7 @@ export class AuthService {
       };
     }
 
-    // Tạo reset token
+    // Create reset token and expiration
     const resetToken = uuidv4();
     const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
@@ -254,18 +343,16 @@ export class AuthService {
    */
   private async generateTokens(user: User): Promise<TokenResponseDto> {
     const payload = { sub: user.id, email: user.email, role: user.role };
-    const accessExpirationStr =
-      this.configService.get<string>('jwt.accessExpiration') || '15m';
-    const refreshExpirationStr =
-      this.configService.get<string>('jwt.refreshExpiration') || '7d';
+    const accessExpirationStr = this.jwtConf.accessExpiration;
+    const refreshExpirationStr = this.jwtConf.refreshExpiration;
 
     const accessToken = this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('jwt.accessSecret'),
+      secret: this.jwtConf.accessSecret,
       expiresIn: this.parseExpirationToSeconds(accessExpirationStr),
     });
 
     const refreshToken = this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('jwt.refreshSecret'),
+      secret: this.jwtConf.refreshSecret,
       expiresIn: this.parseExpirationToSeconds(refreshExpirationStr),
     });
 
@@ -280,8 +367,7 @@ export class AuthService {
    * Save refresh token to Redis
    */
   private async saveRefreshToken(userId: string, token: string): Promise<void> {
-    const expiresIn =
-      this.configService.get<string>('jwt.refreshExpiration') || '7d';
+    const expiresIn = this.jwtConf.refreshExpiration;
     const seconds = this.parseExpirationToSeconds(expiresIn);
 
     await this.redis.set(`refresh:${userId}:${token}`, token, 'EX', seconds);

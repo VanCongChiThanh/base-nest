@@ -1,27 +1,24 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigType } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { UserProvider } from './entities';
 import { UserModule } from '../user/user.module';
 import { MailModule } from '../mail/mail.module';
-import {
-  LocalStrategy,
-  JwtStrategy,
-  JwtRefreshStrategy,
-  GoogleStrategy,
-} from './strategies';
+import jwtConfig from '../../config/jwt.config';
+import { LocalStrategy, JwtStrategy, JwtRefreshStrategy } from './strategies';
 
 @Module({
   imports: [
     PassportModule,
+    TypeOrmModule.forFeature([UserProvider]),
     JwtModule.registerAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret:
-          configService.get<string>('jwt.accessSecret') || 'default-secret',
+      inject: [jwtConfig.KEY],
+      useFactory: (jwtConf: ConfigType<typeof jwtConfig>) => ({
+        secret: jwtConf.accessSecret,
         signOptions: {
           expiresIn: 900, // 15 minutes in seconds
         },
@@ -31,13 +28,7 @@ import {
     MailModule,
   ],
   controllers: [AuthController],
-  providers: [
-    AuthService,
-    LocalStrategy,
-    JwtStrategy,
-    JwtRefreshStrategy,
-    GoogleStrategy,
-  ],
+  providers: [AuthService, LocalStrategy, JwtStrategy, JwtRefreshStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}
