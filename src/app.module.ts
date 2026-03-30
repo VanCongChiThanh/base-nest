@@ -24,6 +24,16 @@ import { NotificationModule } from './modules/notification';
 import { UploadModule } from './modules/upload';
 import { MailModule } from './modules/mail';
 import { RedisModule } from './modules/redis';
+import { LocationModule } from './modules/location';
+import { SkillModule } from './modules/skill';
+import { JobCategoryModule } from './modules/job-category';
+import { ProfileModule } from './modules/profile';
+import { JobModule } from './modules/job';
+import { ReviewModule } from './modules/review';
+import { ReportModule } from './modules/report';
+import { PaymentModule } from './modules/payment';
+import { VerificationModule } from './modules/verification';
+import { SubscriptionModule } from './modules/subscription';
 
 @Module({
   imports: [
@@ -63,6 +73,16 @@ import { RedisModule } from './modules/redis';
     NotificationModule,
     UploadModule,
     MailModule,
+    LocationModule,
+    SkillModule,
+    JobCategoryModule,
+    ProfileModule,
+    JobModule,
+    ReviewModule,
+    ReportModule,
+    PaymentModule,
+    VerificationModule,
+    SubscriptionModule,
   ],
   providers: [
     // Global JWT Guard - Áp dụng cho tất cả endpoints (trừ @Public())

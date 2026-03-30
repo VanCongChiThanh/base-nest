@@ -6,7 +6,7 @@ import {
   UpdateDateColumn,
   OneToMany,
 } from 'typeorm';
-import { Role } from '../../../common/enums';
+import { Role, VerificationLevel } from '../../../common/enums';
 import { Exclude } from 'class-transformer';
 import { UserProvider } from '../../auth/entities';
 
@@ -40,6 +40,14 @@ export class User {
 
   @Column({ name: 'avatar_url', nullable: true })
   avatarUrl: string;
+
+  @Column({
+    name: 'verification_level',
+    type: 'enum',
+    enum: VerificationLevel,
+    default: VerificationLevel.NONE,
+  })
+  verificationLevel: VerificationLevel;
 
   @OneToMany(() => UserProvider, (provider) => provider.user)
   @Exclude()

@@ -19,6 +19,17 @@ const TYPE_TO_REF: Partial<Record<NotificationType, ReferenceType>> = {
   [NotificationType.POST_COMMENTED]: ReferenceType.POST,
   [NotificationType.COMMENT_REPLIED]: ReferenceType.COMMENT,
   [NotificationType.PROMOTION]: ReferenceType.PROMOTION,
+  [NotificationType.JOB_APPLICATION_RECEIVED]: ReferenceType.JOB,
+  [NotificationType.JOB_APPLICATION_ACCEPTED]: ReferenceType.JOB_APPLICATION,
+  [NotificationType.JOB_APPLICATION_REJECTED]: ReferenceType.JOB_APPLICATION,
+  [NotificationType.JOB_COMPLETED]: ReferenceType.JOB,
+  [NotificationType.JOB_CANCELLED]: ReferenceType.JOB,
+  [NotificationType.JOB_CHECKED_IN]: ReferenceType.JOB,
+  [NotificationType.APPLICATION_CANCELLED]: ReferenceType.JOB,
+  [NotificationType.REVIEW_RECEIVED]: ReferenceType.REVIEW,
+  [NotificationType.PAYMENT_CONFIRMED]: ReferenceType.PAYMENT,
+  [NotificationType.PAYMENT_DISPUTED]: ReferenceType.DISPUTE,
+  [NotificationType.DISPUTE_RESOLVED]: ReferenceType.DISPUTE,
 };
 
 /**

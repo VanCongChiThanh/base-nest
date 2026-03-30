@@ -256,6 +256,219 @@ export const SYSTEM_ERRORS = {
   },
 } as const;
 
+// ==================== JOB ====================
+export const JOB_ERRORS = {
+  JOB_NOT_FOUND: {
+    code: 'JOB_NOT_FOUND',
+    message: 'Job not found',
+  },
+  JOB_CREATE_FAILED: {
+    code: 'JOB_CREATE_FAILED',
+    message: 'Failed to create job',
+  },
+  JOB_UPDATE_FAILED: {
+    code: 'JOB_UPDATE_FAILED',
+    message: 'Failed to update job',
+  },
+  JOB_DELETE_FAILED: {
+    code: 'JOB_DELETE_FAILED',
+    message: 'Failed to delete job',
+  },
+  JOB_NOT_OPEN: {
+    code: 'JOB_NOT_OPEN',
+    message: 'Job is not open for applications',
+  },
+  JOB_ALREADY_CLOSED: {
+    code: 'JOB_ALREADY_CLOSED',
+    message: 'Job is already closed',
+  },
+  JOB_OWNER_FORBIDDEN: {
+    code: 'JOB_OWNER_FORBIDDEN',
+    message: 'You are not the owner of this job',
+  },
+  JOB_WORKERS_FULL: {
+    code: 'JOB_WORKERS_FULL',
+    message: 'Job has reached maximum number of workers',
+  },
+  JOB_INVALID_TIME: {
+    code: 'JOB_INVALID_TIME',
+    message: 'End time must be after start time',
+  },
+} as const;
+
+// ==================== JOB APPLICATION ====================
+export const APPLICATION_ERRORS = {
+  APPLICATION_NOT_FOUND: {
+    code: 'APPLICATION_NOT_FOUND',
+    message: 'Job application not found',
+  },
+  APPLICATION_ALREADY_APPLIED: {
+    code: 'APPLICATION_ALREADY_APPLIED',
+    message: 'You have already applied to this job',
+  },
+  APPLICATION_SELF_APPLY: {
+    code: 'APPLICATION_SELF_APPLY',
+    message: 'You cannot apply to your own job',
+  },
+  APPLICATION_NOT_PENDING: {
+    code: 'APPLICATION_NOT_PENDING',
+    message: 'Application is no longer pending',
+  },
+  APPLICATION_ACCESS_FORBIDDEN: {
+    code: 'APPLICATION_ACCESS_FORBIDDEN',
+    message: 'You are not allowed to access this application',
+  },
+  ASSIGNMENT_MUST_BE_ASSIGNED: {
+    code: 'ASSIGNMENT_MUST_BE_ASSIGNED',
+    message: 'Can only check in when the assignment is in ASSIGNED status',
+  },
+  ASSIGNMENT_MUST_BE_IN_PROGRESS: {
+    code: 'ASSIGNMENT_MUST_BE_IN_PROGRESS',
+    message: 'Job must be in IN_PROGRESS status before completing. Please check in first.',
+  },
+  APPLICATION_CHAT_CLOSED: {
+    code: 'APPLICATION_CHAT_CLOSED',
+    message:
+      'Messaging is only available after acceptance and before the job is completed',
+  },
+} as const;
+
+// ==================== PROFILE ====================
+export const PROFILE_ERRORS = {
+  WORKER_PROFILE_NOT_FOUND: {
+    code: 'WORKER_PROFILE_NOT_FOUND',
+    message: 'Worker profile not found',
+  },
+  EMPLOYER_PROFILE_NOT_FOUND: {
+    code: 'EMPLOYER_PROFILE_NOT_FOUND',
+    message: 'Employer profile not found',
+  },
+  PROFILE_ALREADY_EXISTS: {
+    code: 'PROFILE_ALREADY_EXISTS',
+    message: 'Profile already exists',
+  },
+  PROFILE_UPDATE_FAILED: {
+    code: 'PROFILE_UPDATE_FAILED',
+    message: 'Failed to update profile',
+  },
+} as const;
+
+// ==================== SKILL ====================
+export const SKILL_ERRORS = {
+  SKILL_NOT_FOUND: {
+    code: 'SKILL_NOT_FOUND',
+    message: 'Skill not found',
+  },
+  SKILL_ALREADY_EXISTS: {
+    code: 'SKILL_ALREADY_EXISTS',
+    message: 'Skill already exists',
+  },
+} as const;
+
+// ==================== JOB CATEGORY ====================
+export const CATEGORY_ERRORS = {
+  CATEGORY_NOT_FOUND: {
+    code: 'CATEGORY_NOT_FOUND',
+    message: 'Job category not found',
+  },
+  CATEGORY_ALREADY_EXISTS: {
+    code: 'CATEGORY_ALREADY_EXISTS',
+    message: 'Job category already exists',
+  },
+} as const;
+
+// ==================== REVIEW ====================
+export const REVIEW_ERRORS = {
+  REVIEW_NOT_FOUND: {
+    code: 'REVIEW_NOT_FOUND',
+    message: 'Review not found',
+  },
+  REVIEW_ALREADY_EXISTS: {
+    code: 'REVIEW_ALREADY_EXISTS',
+    message: 'You have already reviewed this job',
+  },
+  REVIEW_NOT_ALLOWED: {
+    code: 'REVIEW_NOT_ALLOWED',
+    message: 'You are not allowed to review this job',
+  },
+  REVIEW_JOB_NOT_COMPLETED: {
+    code: 'REVIEW_JOB_NOT_COMPLETED',
+    message: 'Job must be completed before reviewing',
+  },
+} as const;
+
+// ==================== REPORT ====================
+export const REPORT_ERRORS = {
+  REPORT_NOT_FOUND: {
+    code: 'REPORT_NOT_FOUND',
+    message: 'Report not found',
+  },
+  REPORT_SELF_REPORT: {
+    code: 'REPORT_SELF_REPORT',
+    message: 'You cannot report yourself',
+  },
+  REPORT_ALREADY_EXISTS: {
+    code: 'REPORT_ALREADY_EXISTS',
+    message: 'You have already reported this user for this job',
+  },
+} as const;
+
+// ==================== LOCATION ====================
+export const LOCATION_ERRORS = {
+  LOCATION_FETCH_FAILED: {
+    code: 'LOCATION_FETCH_FAILED',
+    message: 'Failed to fetch location data',
+  },
+  LOCATION_PROVINCE_NOT_FOUND: {
+    code: 'LOCATION_PROVINCE_NOT_FOUND',
+    message: 'Province not found',
+  },
+  LOCATION_WARD_NOT_FOUND: {
+    code: 'LOCATION_WARD_NOT_FOUND',
+    message: 'Ward not found',
+  },
+} as const;
+
+// ==================== PAYMENT ====================
+export const PAYMENT_ERRORS = {
+  PAYMENT_NOT_FOUND: {
+    code: 'PAYMENT_NOT_FOUND',
+    message: 'Payment confirmation not found',
+  },
+  PAYMENT_ALREADY_CONFIRMED: {
+    code: 'PAYMENT_ALREADY_CONFIRMED',
+    message: 'Payment has already been confirmed',
+  },
+  PAYMENT_JOB_NOT_COMPLETED: {
+    code: 'PAYMENT_JOB_NOT_COMPLETED',
+    message: 'Job must be completed before confirming payment',
+  },
+  PAYMENT_NOT_WORKER: {
+    code: 'PAYMENT_NOT_WORKER',
+    message: 'Only the assigned worker can confirm payment',
+  },
+} as const;
+
+// ==================== DISPUTE ====================
+export const DISPUTE_ERRORS = {
+  DISPUTE_NOT_FOUND: {
+    code: 'DISPUTE_NOT_FOUND',
+    message: 'Dispute not found',
+  },
+  DISPUTE_ALREADY_EXISTS: {
+    code: 'DISPUTE_ALREADY_EXISTS',
+    message: 'A dispute already exists for this job',
+  },
+  DISPUTE_NOT_INVOLVED: {
+    code: 'DISPUTE_NOT_INVOLVED',
+    message: 'You are not involved in this job',
+  },
+  DISPUTE_ALREADY_RESOLVED: {
+    code: 'DISPUTE_ALREADY_RESOLVED',
+    message: 'Dispute has already been resolved',
+  },
+} as const;
+
 // ==================== ALL ERROR CODES ====================
 export const ERROR_CODES = {
   ...AUTH_ERRORS,
@@ -267,6 +480,16 @@ export const ERROR_CODES = {
   ...UPLOAD_ERRORS,
   ...MAIL_ERRORS,
   ...SYSTEM_ERRORS,
+  ...JOB_ERRORS,
+  ...APPLICATION_ERRORS,
+  ...PROFILE_ERRORS,
+  ...SKILL_ERRORS,
+  ...CATEGORY_ERRORS,
+  ...REVIEW_ERRORS,
+  ...REPORT_ERRORS,
+  ...LOCATION_ERRORS,
+  ...PAYMENT_ERRORS,
+  ...DISPUTE_ERRORS,
 } as const;
 
 // Type for error code keys
