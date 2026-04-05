@@ -138,20 +138,31 @@ export class JobService {
     }
 
     let hasLocationFilter = false;
-    if (filter.latitude !== undefined && filter.longitude !== undefined && filter.radius !== undefined) {
+    if (
+      filter.latitude !== undefined &&
+      filter.longitude !== undefined &&
+      filter.radius !== undefined
+    ) {
       hasLocationFilter = true;
       const distanceSql = `(6371 * acos(cos(radians(:latitude)) * cos(radians(job.latitude)) * cos(radians(job.longitude) - radians(:longitude)) + sin(radians(:latitude)) * sin(radians(job.latitude))))`;
-      
+
       qb.addSelect(`${distanceSql}`, 'distance');
-      qb.andWhere(`${distanceSql} <= :radius`, { 
-        latitude: filter.latitude, 
-        longitude: filter.longitude, 
-        radius: filter.radius 
+      qb.andWhere(`${distanceSql} <= :radius`, {
+        latitude: filter.latitude,
+        longitude: filter.longitude,
+        radius: filter.radius,
       });
     }
 
-    const allowedSortFields = ['createdAt', 'salaryPerHour', 'startTime', 'title'];
-    const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
+    const allowedSortFields = [
+      'createdAt',
+      'salaryPerHour',
+      'startTime',
+      'title',
+    ];
+    const safeSortBy = allowedSortFields.includes(sortBy)
+      ? sortBy
+      : 'createdAt';
     qb.orderBy(`job.${safeSortBy}`, sortOrder);
     qb.skip((page - 1) * limit).take(limit);
 
@@ -206,7 +217,9 @@ export class JobService {
     });
     const profileMap = new Map(profiles.map((p) => [p.userId, p]));
     for (const job of jobs) {
-      Object.assign(job, { employerProfile: profileMap.get(job.employerId) || null });
+      Object.assign(job, {
+        employerProfile: profileMap.get(job.employerId) || null,
+      });
     }
   }
 
@@ -285,7 +298,9 @@ export class JobService {
       where: { jobId, workerId },
     });
     if (existingApp) {
-      throw new ConflictException(APPLICATION_ERRORS.APPLICATION_ALREADY_APPLIED);
+      throw new ConflictException(
+        APPLICATION_ERRORS.APPLICATION_ALREADY_APPLIED,
+      );
     }
 
     const application = this.applicationRepository.create({
@@ -299,7 +314,11 @@ export class JobService {
       job.employerId,
       NotificationType.JOB_APPLICATION_RECEIVED,
       jobId,
-      { jobTitle: job.title, message: dto.coverLetter, applicationId: saved.id },
+      {
+        jobTitle: job.title,
+        message: dto.coverLetter,
+        applicationId: saved.id,
+      },
     );
 
     return saved;
@@ -317,7 +336,9 @@ export class JobService {
       throw new NotFoundException(APPLICATION_ERRORS.APPLICATION_NOT_FOUND);
     }
     if (application.workerId !== workerId) {
-      throw new ForbiddenException(APPLICATION_ERRORS.APPLICATION_ACCESS_FORBIDDEN);
+      throw new ForbiddenException(
+        APPLICATION_ERRORS.APPLICATION_ACCESS_FORBIDDEN,
+      );
     }
     if (application.status !== ApplicationStatus.PENDING) {
       throw new BadRequestException(APPLICATION_ERRORS.APPLICATION_NOT_PENDING);
@@ -349,7 +370,9 @@ export class JobService {
       throw new NotFoundException(APPLICATION_ERRORS.APPLICATION_NOT_FOUND);
     }
     if (application.job.employerId !== employerId) {
-      throw new ForbiddenException(APPLICATION_ERRORS.APPLICATION_ACCESS_FORBIDDEN);
+      throw new ForbiddenException(
+        APPLICATION_ERRORS.APPLICATION_ACCESS_FORBIDDEN,
+      );
     }
     if (application.status !== ApplicationStatus.PENDING) {
       throw new BadRequestException(APPLICATION_ERRORS.APPLICATION_NOT_PENDING);
@@ -383,7 +406,11 @@ export class JobService {
       application.workerId,
       NotificationType.JOB_APPLICATION_ACCEPTED,
       application.id,
-      { jobTitle: application.job.title, applicationId: application.id, jobId: application.jobId },
+      {
+        jobTitle: application.job.title,
+        applicationId: application.id,
+        jobId: application.jobId,
+      },
     );
 
     return saved;
@@ -401,7 +428,9 @@ export class JobService {
       throw new NotFoundException(APPLICATION_ERRORS.APPLICATION_NOT_FOUND);
     }
     if (application.job.employerId !== employerId) {
-      throw new ForbiddenException(APPLICATION_ERRORS.APPLICATION_ACCESS_FORBIDDEN);
+      throw new ForbiddenException(
+        APPLICATION_ERRORS.APPLICATION_ACCESS_FORBIDDEN,
+      );
     }
     if (application.status !== ApplicationStatus.PENDING) {
       throw new BadRequestException(APPLICATION_ERRORS.APPLICATION_NOT_PENDING);
@@ -415,7 +444,11 @@ export class JobService {
       application.workerId,
       NotificationType.JOB_APPLICATION_REJECTED,
       application.id,
-      { jobTitle: application.job.title, applicationId: application.id, jobId: application.jobId },
+      {
+        jobTitle: application.job.title,
+        applicationId: application.id,
+        jobId: application.jobId,
+      },
     );
 
     return saved;
@@ -426,7 +459,12 @@ export class JobService {
     employerId: string,
     page = 1,
     limit = 10,
-  ): Promise<{ data: JobApplication[]; total: number; page: number; limit: number }> {
+  ): Promise<{
+    data: JobApplication[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
     const job = await this.findJobById(jobId);
     if (job.employerId !== employerId) {
       throw new ForbiddenException(JOB_ERRORS.JOB_OWNER_FORBIDDEN);
@@ -448,7 +486,12 @@ export class JobService {
     workerId: string,
     page = 1,
     limit = 10,
-  ): Promise<{ data: JobApplication[]; total: number; page: number; limit: number }> {
+  ): Promise<{
+    data: JobApplication[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
     const [data, total] = await this.applicationRepository.findAndCount({
       where: { workerId },
       relations: ['job', 'job.employer', 'job.category'],
@@ -549,7 +592,9 @@ export class JobService {
     const isWorker = application.workerId === callerId;
     const isEmployer = application.job.employerId === callerId;
     if (!isWorker && !isEmployer) {
-      throw new ForbiddenException(APPLICATION_ERRORS.APPLICATION_ACCESS_FORBIDDEN);
+      throw new ForbiddenException(
+        APPLICATION_ERRORS.APPLICATION_ACCESS_FORBIDDEN,
+      );
     }
 
     const assignment = await this.assignmentRepository.findOne({
@@ -558,7 +603,7 @@ export class JobService {
 
     // Build steps
     const steps = this.buildProgressSteps(application, assignment ?? null);
-    const currentStep = steps.filter(s => s.status === 'done').length;
+    const currentStep = steps.filter((s) => s.status === 'done').length;
 
     // Worker profile with privacy filter
     const workerProfile = await this.workerProfileRepository.findOne({
@@ -566,11 +611,12 @@ export class JobService {
       relations: ['workerSkills', 'workerSkills.skill'],
     });
 
-    const isAccepted = [
-      ApplicationStatus.ACCEPTED,
-    ].includes(application.status);
-    const isWorking = assignment?.status === AssignmentStatus.IN_PROGRESS
-      || assignment?.status === AssignmentStatus.COMPLETED;
+    const isAccepted = [ApplicationStatus.ACCEPTED].includes(
+      application.status,
+    );
+    const isWorking =
+      assignment?.status === AssignmentStatus.IN_PROGRESS ||
+      assignment?.status === AssignmentStatus.COMPLETED;
 
     const workerInfo = this.buildWorkerInfo(
       application.worker,
@@ -592,13 +638,15 @@ export class JobService {
       badge: employerProfile?.badge ?? null,
       isVerifiedBusiness: employerProfile?.isVerifiedBusiness ?? false,
       // phone only shown when accepted
-      phone: isAccepted || isWorking
-        ? this.applyPrivacy(
-            employerProfile?.phone ?? null,
-            employerProfile?.privacySettings?.phone ?? PrivacyVisibility.ACCEPTED_ONLY,
-            true,
-          )
-        : null,
+      phone:
+        isAccepted || isWorking
+          ? this.applyPrivacy(
+              employerProfile?.phone ?? null,
+              employerProfile?.privacySettings?.phone ??
+                PrivacyVisibility.ACCEPTED_ONLY,
+              true,
+            )
+          : null,
     };
 
     return {
@@ -693,12 +741,11 @@ export class JobService {
       {
         key: 'CHECKED_IN',
         label: 'Check-in làm việc',
-        status:
-          assignment?.checkedInAt
-            ? 'done'
-            : assignment?.status === AssignmentStatus.ASSIGNED
-              ? 'active'
-              : 'pending',
+        status: assignment?.checkedInAt
+          ? 'done'
+          : assignment?.status === AssignmentStatus.ASSIGNED
+            ? 'active'
+            : 'pending',
         timestamp: assignment?.checkedInAt ?? null,
       },
       {
@@ -716,7 +763,9 @@ export class JobService {
         key: 'COMPLETED',
         label: 'Hoàn thành',
         status:
-          assignment?.status === AssignmentStatus.COMPLETED ? 'done' : 'pending',
+          assignment?.status === AssignmentStatus.COMPLETED
+            ? 'done'
+            : 'pending',
         timestamp: assignment?.completedAt ?? null,
       },
     ];
@@ -725,7 +774,12 @@ export class JobService {
   }
 
   private buildWorkerInfo(
-    worker: { id: string; firstName: string; lastName: string; avatarUrl: string | null },
+    worker: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      avatarUrl: string | null;
+    },
     profile: WorkerProfile | null,
     isAccepted: boolean,
   ): Record<string, unknown> {
@@ -748,12 +802,17 @@ export class JobService {
       info.phone = profile?.phone ?? null;
     } else {
       const phoneVis = privacy.phone ?? PrivacyVisibility.ACCEPTED_ONLY;
-      info.phone = phoneVis === PrivacyVisibility.PUBLIC ? (profile?.phone ?? null) : null;
+      info.phone =
+        phoneVis === PrivacyVisibility.PUBLIC ? (profile?.phone ?? null) : null;
     }
 
     // Address
     const addressVis = privacy.address ?? PrivacyVisibility.ACCEPTED_ONLY;
-    info.address = this.applyPrivacy(profile?.address ?? null, addressVis, isAccepted);
+    info.address = this.applyPrivacy(
+      profile?.address ?? null,
+      addressVis,
+      isAccepted,
+    );
 
     // Date of birth
     const dobVis = privacy.dateOfBirth ?? PrivacyVisibility.PRIVATE;
@@ -773,7 +832,7 @@ export class JobService {
   ): string | null {
     // If the application is accepted or they are working together, always show personal information
     if (isAccepted) return value;
-    
+
     // Otherwise, follow the standard privacy rules
     if (visibility === PrivacyVisibility.PUBLIC) return value;
     return null;

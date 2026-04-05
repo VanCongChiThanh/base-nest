@@ -3,5 +3,6 @@
  */
 export enum Role {
   USER = 'USER',
+  ORGANIZATION = 'ORGANIZATION',
   ADMIN = 'ADMIN',
 }

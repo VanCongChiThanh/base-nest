@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ConfigType } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_GUARD } from '@nestjs/core';
+import { join } from 'node:path';
 
 // Config imports
 import {
@@ -12,10 +13,12 @@ import {
   googleConfig,
   awsConfig,
   mailConfig,
+  ekycConfig,
+  payosConfig,
 } from './config';
 
 // Common imports
-import { JwtAuthGuard, RolesGuard } from './common/guards';
+import { EntitlementGuard, JwtAuthGuard, RolesGuard } from './common/guards';
 
 // Module imports
 import { UserModule } from './modules/user';
@@ -34,12 +37,14 @@ import { ReportModule } from './modules/report';
 import { PaymentModule } from './modules/payment';
 import { VerificationModule } from './modules/verification';
 import { SubscriptionModule } from './modules/subscription';
+import { EkycModule } from './modules/ekyc';
 
 @Module({
   imports: [
     // Config Module - Load environment variables
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: [join(__dirname, '../.env')],
       load: [
         databaseConfig,
         redisConfig,
@@ -47,6 +52,8 @@ import { SubscriptionModule } from './modules/subscription';
         googleConfig,
         awsConfig,
         mailConfig,
+        ekycConfig,
+        payosConfig,
       ],
     }),
 
@@ -83,6 +90,7 @@ import { SubscriptionModule } from './modules/subscription';
     PaymentModule,
     VerificationModule,
     SubscriptionModule,
+    EkycModule,
   ],
   providers: [
     // Global JWT Guard - Áp dụng cho tất cả endpoints (trừ @Public())
@@ -94,6 +102,11 @@ import { SubscriptionModule } from './modules/subscription';
     {
       provide: APP_GUARD,
       useClass: RolesGuard,
+    },
+    // Global Entitlement Guard - chỉ chạy khi endpoint có metadata entitlement
+    {
+      provide: APP_GUARD,
+      useClass: EntitlementGuard,
     },
   ],
 })

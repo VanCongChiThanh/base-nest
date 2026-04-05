@@ -1,0 +1,8 @@
+export enum PlanCode {
+  FREE = 'FREE',
+  STARTER = 'STARTER',
+  GROWTH = 'GROWTH',
+  PRO = 'PRO',
+  BUSINESS_LITE = 'BUSINESS_LITE',
+  BUSINESS = 'BUSINESS',
+}

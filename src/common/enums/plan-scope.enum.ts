@@ -1,0 +1,5 @@
+export enum PlanScope {
+  WORKER = 'WORKER',
+  EMPLOYER = 'EMPLOYER',
+  ORGANIZATION = 'ORGANIZATION',
+}

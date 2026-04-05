@@ -5,10 +5,12 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  OneToOne,
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../user/entities';
 import { VerificationLevel, VerificationStatus } from '../../../common/enums';
+import { EkycResult } from './ekyc-result.entity';
 
 @Entity('verification_requests')
 export class VerificationRequest {
@@ -60,6 +62,17 @@ export class VerificationRequest {
 
   @Column({ name: 'reviewed_at', type: 'timestamptz', nullable: true })
   reviewedAt: Date;
+
+  // ─── eKYC result link ───
+  @Column({ name: 'ekyc_result_id', nullable: true })
+  ekycResultId: string;
+
+  @OneToOne(() => EkycResult, { nullable: true, eager: false })
+  @JoinColumn({ name: 'ekyc_result_id' })
+  ekycResult: EkycResult;
+
+  @Column({ name: 'data_signature', type: 'text', nullable: true })
+  dataSignature: string;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

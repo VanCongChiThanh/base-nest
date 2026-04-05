@@ -1,7 +1,6 @@
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { NotificationType, ReferenceType } from '../../../common/enums';
 
-
 export class CreateNotificationDto {
   @IsString()
   @IsNotEmpty()

@@ -1,5 +1,5 @@
 import { Exclude, Expose } from 'class-transformer';
-import { Role } from '../../../common/enums';
+import { Role, VerificationLevel } from '../../../common/enums';
 
 @Exclude()
 export class UserResponseDto {
@@ -23,6 +23,9 @@ export class UserResponseDto {
 
   @Expose()
   avatarUrl: string;
+
+  @Expose()
+  verificationLevel: VerificationLevel;
 
   @Expose()
   createdAt: Date;

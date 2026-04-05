@@ -12,3 +12,5 @@ export * from './dispute-status.enum';
 export * from './subscription-status.enum';
 export * from './privacy-visibility.enum';
 export * from './job-salary-type.enum';
+export * from './plan-code.enum';
+export * from './plan-scope.enum';

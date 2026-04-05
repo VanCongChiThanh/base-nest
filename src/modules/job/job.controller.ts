@@ -16,7 +16,12 @@ import {
   CheckInJobDto,
   PostApplicationMessageDto,
 } from './dto';
-import { CurrentUser, Public } from '../../common/decorators';
+import {
+  ConsumeQuota,
+  CurrentUser,
+  Public,
+  RequireFeature,
+} from '../../common/decorators';
 import { User } from '../user/entities';
 
 @Controller()
@@ -29,6 +34,11 @@ export class JobController {
   // ==================== JOB CRUD ====================
 
   @Post('jobs')
+  @ConsumeQuota({
+    counterKey: 'job.post.count',
+    limitFeatureKey: 'job.post.monthly_limit',
+    period: 'monthly',
+  })
   async createJob(@CurrentUser() user: User, @Body() dto: CreateJobDto) {
     return this.jobService.createJob(user.id, dto);
   }
@@ -56,6 +66,11 @@ export class JobController {
   }
 
   @Post('jobs/:id/apply')
+  @ConsumeQuota({
+    counterKey: 'job.apply.count',
+    limitFeatureKey: 'job.apply.daily_limit',
+    period: 'daily',
+  })
   async applyForJob(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,
@@ -117,6 +132,7 @@ export class JobController {
   }
 
   @Post('applications/:id/messages')
+  @RequireFeature({ key: 'chat.enabled' })
   async postApplicationMessage(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,

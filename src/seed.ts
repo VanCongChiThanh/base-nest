@@ -19,6 +19,7 @@ import { Notification } from './modules/notification/entities/notification.entit
 import { PaymentConfirmation } from './modules/payment/entities/payment-confirmation.entity';
 import { Dispute } from './modules/payment/entities/dispute.entity';
 import { VerificationRequest } from './modules/verification/entities/verification-request.entity';
+import { EkycResult } from './modules/verification/entities/ekyc-result.entity';
 import { SubscriptionPlan } from './modules/subscription/entities/subscription-plan.entity';
 import { UserSubscription } from './modules/subscription/entities/user-subscription.entity';
 import { Report } from './modules/report/entities/report.entity';
@@ -63,6 +64,7 @@ async function seed() {
       PaymentConfirmation,
       Dispute,
       VerificationRequest,
+      EkycResult,
       SubscriptionPlan,
       UserSubscription,
       Report,

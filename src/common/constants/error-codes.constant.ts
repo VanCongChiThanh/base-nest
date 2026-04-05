@@ -324,7 +324,8 @@ export const APPLICATION_ERRORS = {
   },
   ASSIGNMENT_MUST_BE_IN_PROGRESS: {
     code: 'ASSIGNMENT_MUST_BE_IN_PROGRESS',
-    message: 'Job must be in IN_PROGRESS status before completing. Please check in first.',
+    message:
+      'Job must be in IN_PROGRESS status before completing. Please check in first.',
   },
   APPLICATION_CHAT_CLOSED: {
     code: 'APPLICATION_CHAT_CLOSED',
