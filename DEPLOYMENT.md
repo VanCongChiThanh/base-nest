@@ -1,365 +1,251 @@
-# 🚀 Hướng Dẫn Deploy GigWork Backend Lên Google Cloud Run
+# 🚀 Hướng Dẫn Deploy Backend Lên DigitalOcean VPS (Docker Compose)
 
 ## Tổng Quan
 
-Hướng dẫn từng bước deploy NestJS backend lên Google Cloud Run với:
-- ✅ **HTTPS tự động** (Google quản lý SSL)
-- ✅ **CI/CD** qua GitHub Actions
-- ✅ **Auto-scaling** (0 → 3 instances)
-- ✅ **Docker multi-stage** build
-- ✅ **Workload Identity Federation** (không cần JSON key)
+Hướng dẫn từng bước deploy hệ thống backend NestJS (GigWork/Coursevo) lên máy chủ ảo (VPS) của DigitalOcean với kiến trúc tối ưu:
+- ✅ **HTTPS tự động** (Quản lý chứng chỉ SSL tự động 100% bằng Caddy)
+- ✅ **CI/CD Tự động hóa** qua GitHub Actions
+- ✅ **Docker Multi-stage Build** (Tối ưu dung lượng và bảo mật)
+- ✅ **All-in-one Compose** (Gom chung API, PostgreSQL có pgvector, và Redis trên cùng 1 server)
+- ✅ **Zero Downtime Build** (Tự động giữ app cũ chạy trong lúc build app mới)
 
 ---
 
-## 📋 Prerequisites
+## 📋 Prerequisites (Yêu cầu chuẩn bị)
 
-1. **Google Cloud Account** — [console.cloud.google.com](https://console.cloud.google.com)
-2. **GCP Billing** — Cần enable billing (Cloud Run có free tier generous)
-3. **gcloud CLI** — [Cài đặt](https://cloud.google.com/sdk/docs/install)
-4. **GitHub Repository** — Push code lên GitHub
-
----
-
-## 1️⃣ Setup Google Cloud Project
-
-### 1.1 Tạo/Chọn Project
-
-```bash
-# Tạo project mới
-gcloud projects create gigwork-backend --name="GigWork Backend"
-
-# Hoặc chọn project có sẵn
-gcloud config set project YOUR_PROJECT_ID
-```
-
-### 1.2 Enable APIs
-
-```bash
-# Enable tất cả APIs cần thiết
-gcloud services enable \
-  run.googleapis.com \
-  artifactregistry.googleapis.com \
-  cloudbuild.googleapis.com \
-  iam.googleapis.com \
-  iamcredentials.googleapis.com
-```
-
-### 1.3 Tạo Artifact Registry (Docker Registry)
-
-```bash
-gcloud artifacts repositories create gigwork-docker \
-  --repository-format=docker \
-  --location=asia-southeast1 \
-  --description="GigWork Docker images"
-```
+1. **VPS DigitalOcean (Ubuntu)** — Đã có sẵn IP (VD: `168.144.138.178`).
+2. **Domain** — Đã sở hữu tên miền (VD: `api-coursevo-dev.id.vn`).
+3. **GitHub Repository** — Nơi lưu trữ source code backend.
+4. **SSH Key** — Khóa bảo mật Private Key (`id_ed25519`) để GitHub chui vào server.
 
 ---
 
-## 2️⃣ Setup Database & Redis
+## 1️⃣ Setup Môi trường Server (VPS)
 
-### Option A: Cloud SQL (Recommended)
+### 1.1 Trỏ Tên Miền (DNS)
+Vào trang quản lý tên miền của bạn, tạo một bản ghi (Record) để trỏ tên miền về IP của VPS:
+* **Type:** `A`
+* **Name:** `api-coursevo-dev` (hoặc `@` nếu dùng domain gốc)
+* **Value:** `168.144.138.178` (IP của server)
 
-```bash
-# Tạo PostgreSQL instance (với pgvector)
-gcloud sql instances create gigwork-db \
-  --database-version=POSTGRES_16 \
-  --tier=db-f1-micro \
-  --region=asia-southeast1 \
-  --storage-size=10 \
-  --storage-auto-increase
-
-# Tạo database
-gcloud sql databases create nestjs_base --instance=gigwork-db
-
-# Set password
-gcloud sql users set-password postgres \
-  --instance=gigwork-db \
-  --password=YOUR_SECURE_PASSWORD
-```
-
-> ⚠️ **pgvector**: Cloud SQL PostgreSQL 16+ hỗ trợ pgvector extension. Bạn cần enable nó:
-> ```sql
-> CREATE EXTENSION IF NOT EXISTS vector;
-> ```
-
-### Option B: Dùng External Database
-
-Bạn có thể dùng database từ:
-- **Supabase** (Free tier, có sẵn pgvector)
-- **Neon** (Serverless PostgreSQL, free tier)
-- **Railway** (PostgreSQL + Redis, đơn giản)
-
-### Redis: Memorystore
+### 1.2 Cài đặt Docker & Swap RAM (Chạy 1 lần duy nhất)
+SSH vào server và chạy cụm lệnh sau để cài đồ nghề và tạo 2GB RAM ảo (tránh sập lúc build):
 
 ```bash
-# Tạo Redis instance
-gcloud redis instances create gigwork-redis \
-  --size=1 \
-  --region=asia-southeast1 \
-  --redis-version=redis_7_0
-```
+# Cập nhật và cài đặt Docker chuẩn
+apt-get update
+apt-get install -y ca-certificates curl gnupg
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL [https://download.docker.com/linux/ubuntu/gpg](https://download.docker.com/linux/ubuntu/gpg) | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+echo \
+  "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] [https://download.docker.com/linux/ubuntu](https://download.docker.com/linux/ubuntu) \
+  "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+  tee /etc/apt/sources.list.d/docker.list > /dev/null
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-Hoặc dùng **Upstash Redis** (Free, serverless) — đơn giản hơn cho đồ án.
+# Tạo 2GB Swap (RAM ảo)
+fallocate -l 2G /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+echo '/swapfile none swap sw 0 0' | tee -a /etc/fstab
 
----
-
-## 3️⃣ Setup Workload Identity Federation (WIF)
-
-WIF cho phép GitHub Actions authenticate với GCP **không cần JSON key** (bảo mật hơn).
-
-### 3.1 Tạo Service Account
-
-```bash
-# Tạo service account
-gcloud iam service-accounts create github-actions \
-  --display-name="GitHub Actions Deploy"
-
-# Gán roles
-PROJECT_ID=$(gcloud config get-value project)
-
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:github-actions@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --role="roles/run.admin"
-
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:github-actions@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --role="roles/artifactregistry.writer"
-
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:github-actions@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --role="roles/iam.serviceAccountUser"
-```
-
-### 3.2 Tạo Workload Identity Pool
-
-```bash
-# Tạo pool
-gcloud iam workload-identity-pools create github-pool \
-  --location="global" \
-  --display-name="GitHub Actions Pool"
-
-# Tạo provider
-gcloud iam workload-identity-pools providers create-oidc github-provider \
-  --location="global" \
-  --workload-identity-pool="github-pool" \
-  --display-name="GitHub Provider" \
-  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
-  --issuer-uri="https://token.actions.githubusercontent.com"
-
-# Cho phép GitHub repo sử dụng
-REPO="YOUR_GITHUB_USERNAME/base-nest"  # ← Thay bằng repo thật
-
-gcloud iam service-accounts add-iam-policy-binding \
-  github-actions@${PROJECT_ID}.iam.gserviceaccount.com \
-  --role="roles/iam.workloadIdentityUser" \
-  --member="principalSet://iam.googleapis.com/projects/$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')/locations/global/workloadIdentityPools/github-pool/attribute.repository/${REPO}"
-```
-
-### 3.3 Lấy WIF Provider ID
-
-```bash
-# Lấy full resource name
-gcloud iam workload-identity-pools providers describe github-provider \
-  --workload-identity-pool="github-pool" \
-  --location="global" \
-  --format="value(name)"
-```
-
-Output dạng: `projects/123456789/locations/global/workloadIdentityPools/github-pool/providers/github-provider`
-
----
-
-## 4️⃣ Setup GitHub Secrets
-
-Vào repo GitHub → Settings → Secrets and variables → Actions → New repository secret:
-
-| Secret Name | Giá trị |
-|-------------|---------|
-| `GCP_PROJECT_ID` | ID project GCP của bạn |
-| `WIF_PROVIDER` | Full resource name từ bước 3.3 |
-| `WIF_SERVICE_ACCOUNT` | `github-actions@PROJECT_ID.iam.gserviceaccount.com` |
-
----
-
-## 5️⃣ Environment Variables
-
-### Setup Secret Manager (cho sensitive data)
-
-```bash
-# Tạo secret cho DB password
-echo -n "YOUR_DB_PASSWORD" | gcloud secrets create db-password --data-file=-
-
-# Tạo secret cho JWT
-echo -n "YOUR_JWT_SECRET" | gcloud secrets create jwt-access-secret --data-file=-
-echo -n "YOUR_JWT_REFRESH_SECRET" | gcloud secrets create jwt-refresh-secret --data-file=-
-
-# Gemini API Key
-echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets create gemini-api-key --data-file=-
-
-# Gán quyền cho service account Cloud Run
-gcloud secrets add-iam-policy-binding db-password \
-  --member="serviceAccount:${PROJECT_ID}-compute@developer.gserviceaccount.com" \
-  --role="roles/secretmanager.secretAccessor"
-```
-
-### Deploy với env vars
-
-```bash
-gcloud run deploy gigwork-backend \
-  --image=asia-southeast1-docker.pkg.dev/${PROJECT_ID}/gigwork-docker/gigwork-backend:latest \
-  --region=asia-southeast1 \
-  --platform=managed \
-  --allow-unauthenticated \
-  --port=8080 \
-  --memory=512Mi \
-  --set-env-vars="NODE_ENV=production,PORT=8080" \
-  --set-env-vars="DB_HOST=/cloudsql/${PROJECT_ID}:asia-southeast1:gigwork-db" \
-  --set-env-vars="DB_PORT=5432,DB_USERNAME=postgres,DB_DATABASE=nestjs_base" \
-  --set-env-vars="FRONTEND_URL=https://your-frontend.vercel.app" \
-  --set-secrets="DB_PASSWORD=db-password:latest" \
-  --set-secrets="JWT_ACCESS_SECRET=jwt-access-secret:latest" \
-  --set-secrets="GEMINI_API_KEY=gemini-api-key:latest" \
-  --add-cloudsql-instances=${PROJECT_ID}:asia-southeast1:gigwork-db
+# Tạo thư mục chứa code
+mkdir -p /app/gigwork
 ```
 
 ---
 
-## 6️⃣ Deploy Thủ Công (Manual)
+## 2️⃣ Cấu hình GitHub Secrets cho CI/CD
 
-Nếu muốn deploy nhanh mà không cần GitHub Actions:
+Để GitHub Actions có quyền truy cập VPS và cài đặt biến môi trường một cách bảo mật, vào **GitHub Repo → Settings → Secrets and variables → Actions** và tạo 3 biến sau:
 
-```bash
-# 1. Build Docker image
-docker build -t asia-southeast1-docker.pkg.dev/${PROJECT_ID}/gigwork-docker/gigwork-backend:latest .
+| Secret Name | Giá trị ví dụ | Ý nghĩa |
+|-------------|---------|---------|
+| `DO_HOST` | `168.144.138.178` | IP của Server DigitalOcean |
+| `DO_SSH_KEY` | `-----BEGIN OPENSSH PRIVATE KEY-----...` | Nội dung file Private Key chuẩn xác từ máy tính. |
+| `ENV_FILE` | `PORT=3000\nDB_HOST=postgres...` | Toàn bộ nội dung file `.env` thật dành cho Production. |
 
-# 2. Push lên Artifact Registry
-gcloud auth configure-docker asia-southeast1-docker.pkg.dev
-docker push asia-southeast1-docker.pkg.dev/${PROJECT_ID}/gigwork-docker/gigwork-backend:latest
+---
 
-# 3. Deploy lên Cloud Run
-gcloud run deploy gigwork-backend \
-  --image=asia-southeast1-docker.pkg.dev/${PROJECT_ID}/gigwork-docker/gigwork-backend:latest \
-  --region=asia-southeast1 \
-  --platform=managed \
-  --allow-unauthenticated \
-  --port=8080
+## 3️⃣ Cấu Trúc File Triển Khai Quan Trọng
+
+Hệ thống hoạt động dựa trên sự phối hợp của 3 file chính. Hãy đảm bảo code hiện tại khớp với cấu hình này:
+
+### 3.1: `.dockerignore`
+Ngăn Docker copy các file rác và thư mục cũ vào Image:
+```text
+node_modules
+npm-debug.log
+dist
+.git
+.github
+.env
+.env.*
+*.md
+test
+coverage
+```
+
+### 3.2: `Dockerfile` (Multi-stage)
+Build NestJS và chỉ giữ lại thư mục `dist` cùng các package cần thiết:
+```dockerfile
+# ──── Stage 1: Build ────
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# ──── Stage 2: Production ────
+FROM node:22-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package*.json ./
+
+ENV PORT=3000
+EXPOSE 3000
+
+RUN addgroup -g 1001 -S nestjs && adduser -S nestjs -u 1001
+USER nestjs
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api || exit 1
+
+CMD ["node", "dist/main.js"]
+```
+
+### 3.3: `docker-compose.yml`
+Quản lý toàn bộ cơ sở hạ tầng (API, Caddy HTTPS, DB, Cache):
+```yaml
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nestjs_api
+    restart: unless-stopped
+    expose:
+      - '8080' # Chú ý: Phải khớp với PORT trong Dockerfile
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy_proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data       
+      - caddy_config:/config
+    depends_on:
+      - api
+    command: caddy reverse-proxy --from [https://api-coursevo-dev.id.vn](https://api-coursevo-dev.id.vn) --to http://api:8080 
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: nestjs_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: nestjs_base
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: nestjs_redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
 ```
 
 ---
 
-## 7️⃣ Custom Domain + HTTPS
+## 🔄 CI/CD Flow (Luồng tự động hóa)
 
-### 7.1 Map Custom Domain
+Quy trình tự động hóa mỗi khi bạn `git push`:
 
-```bash
-# Map domain
-gcloud beta run domain-mappings create \
-  --service=gigwork-backend \
-  --domain=api.gigwork.vn \
-  --region=asia-southeast1
-```
-
-### 7.2 DNS Setup
-
-Thêm DNS records theo hướng dẫn GCP:
-
-| Type | Name | Value |
-|------|------|-------|
-| CNAME | api | ghs.googlehosted.com |
-
-> ✅ **SSL/HTTPS** được Google tự động provision và quản lý. Không cần setup SSL certificate thủ công!
-
-### 7.3 Verify
-
-```bash
-# Kiểm tra status
-gcloud beta run domain-mappings describe \
-  --domain=api.gigwork.vn \
-  --region=asia-southeast1
-```
-
----
-
-## 8️⃣ Monitoring & Logging
-
-### Cloud Logging
-
-```bash
-# Xem logs
-gcloud run services logs read gigwork-backend --region=asia-southeast1 --limit=50
-```
-
-### Cloud Console
-
-- **Logs**: Console → Cloud Run → gigwork-backend → Logs
-- **Metrics**: Console → Cloud Run → gigwork-backend → Metrics
-- **Error Reporting**: Console → Error Reporting
-
-### Uptime Check
-
-```bash
-# Tạo uptime check
-gcloud monitoring uptime-checks create http gigwork-health \
-  --resource-type=uptime-url \
-  --host=gigwork-backend-xxxxx.run.app \
-  --path=/api \
-  --check-interval=300
-```
-
----
-
-## 🆓 Cloud Run Free Tier
-
-Cloud Run cung cấp **free tier** hàng tháng:
-- **2 triệu requests**
-- **360,000 GiB-giây** memory
-- **180,000 vCPU-giây** compute
-- **1 GiB** egress traffic
-
-→ Đủ cho đồ án tốt nghiệp nếu set `min-instances=0`.
-
----
-
-## 🔄 CI/CD Flow
-
-```
-Developer push code → GitHub
+```text
+1. Developer push code lên nhánh `main` trên GitHub.
          ↓
-GitHub Actions triggered
+2. GitHub Actions kích hoạt file `.github/workflows/deploy.yml`.
          ↓
-┌─────────────────────────┐
-│ 1. Checkout code        │
-│ 2. Auth with GCP (WIF)  │
-│ 3. Build Docker image   │
-│ 4. Push to Registry     │
-│ 5. Deploy to Cloud Run  │
-│ 6. Health check         │
-└─────────────────────────┘
+3. Dùng SSH Key, GitHub copy toàn bộ code mới sang thư mục `/app/gigwork` trên VPS.
          ↓
-Live at https://api.gigwork.vn ✅
+4. GitHub xuất nội dung của biến secret `ENV_FILE` thành file `.env` thật trên VPS.
+         ↓
+5. GitHub chạy lệnh `docker compose up -d --build` trên VPS.
+         ↓
+6. VPS tiến hành tải dependencies, build thư mục dist, và tráo đổi container API mới (Không làm sập Caddy/DB).
+         ↓
+Live at [https://api-coursevo-dev.id.vn](https://api-coursevo-dev.id.vn) ✅
 ```
 
 ---
 
-## 🐛 Troubleshooting
+## 🐛 Troubleshooting (Bắt bệnh thường gặp)
 
-### Lỗi "The user-provided container failed to start"
+### 1. Lỗi "Cannot find module '/app/dist/main.js'" trong log server
+* **Nguyên nhân:** Lệnh build trong `Dockerfile` bị fail nên không sinh ra thư mục dist, hoặc bạn set sai đường dẫn chạy lệnh.
+* **Khắc phục:** - Kiểm tra `package.json` và `package-lock.json` dưới máy đã đồng bộ chưa (`npm install`).
+  - Kiểm tra file `.dockerignore` xem có vô tình block file source code không.
+  - Sửa lại lệnh CMD ở cuối Dockerfile nếu project yêu cầu chạy `/app/dist/src/main.js`.
 
-- Kiểm tra `PORT` env được set đúng (Cloud Run dùng `PORT=8080`)
-- Kiểm tra `main.ts` lắng nghe `process.env.PORT`
-- Xem logs: `gcloud run services logs read gigwork-backend --region=asia-southeast1`
+### 2. GitHub Actions báo lỗi: "ssh: handshake failed"
+* **Nguyên nhân:** Khóa `DO_SSH_KEY` trên GitHub bị sai định dạng.
+* **Khắc phục:** Copy lại chính xác Private Key trên máy tính từ dòng `-----BEGIN OPENSSH PRIVATE KEY-----` đến hết dòng `-----END OPENSSH PRIVATE KEY-----`.
 
-### Lỗi "Permission denied"
+### 3. Web báo lỗi "502 Bad Gateway"
+* **Nguyên nhân:** Caddy Proxy gọi vào API nhưng API đang đóng cửa hoặc chạy nhầm cổng.
+* **Khắc phục:** Mở file `docker-compose.yml`, đảm bảo số ở phần `expose: - '8080'` của API phải khớp hoàn toàn với số `--to http://api:8080` của dịch vụ Caddy.
 
-- Kiểm tra Service Account có đủ roles
-- Kiểm tra WIF provider mapping đúng GitHub repo
+### 4. Giao diện báo lỗi "Failed to fetch" (CORS)
+* **Khắc phục:** Thêm hàm bật CORS trong file `main.ts` của NestJS:
+  ```typescript
+  app.enableCors({
+    origin: true,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    credentials: true,
+  });
+  ```
 
-### Lỗi Database connection
-
-- Nếu dùng Cloud SQL: thêm `--add-cloudsql-instances`
-- Kiểm tra DB_HOST format cho Cloud SQL: `/cloudsql/PROJECT:REGION:INSTANCE`
-
-### pgvector không hoạt động
-
-- Cloud SQL PostgreSQL 16+ hỗ trợ pgvector
-- Chạy `CREATE EXTENSION IF NOT EXISTS vector;` trong database
+### 💡 Lệnh kiểm tra log trên Server
+Nếu code báo xanh trên GitHub nhưng app vẫn lỗi, SSH vào VPS và gõ lệnh sau để xem lỗi chi tiết của NestJS:
+```bash
+cd /app/gigwork
+docker compose logs -n 50 api
+```

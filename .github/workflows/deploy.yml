@@ -23,6 +23,7 @@ jobs:
           key: ${{ secrets.DO_SSH_KEY }}
           source: "."
           target: "/app/gigwork"
+          strip_components: 1
 
       # ──── Lệnh chạy trên Server ────
       - name: Execute deployment commands
