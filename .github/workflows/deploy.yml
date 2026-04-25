@@ -38,9 +38,10 @@ jobs:
             # Tạo file .env từ GitHub Secrets
             echo "${{ secrets.ENV_FILE }}" > .env
             
-            # Tắt container cũ, build và chạy container mới
+            # Tắt container cũ, build lại hoàn toàn (không dùng cache) và chạy
             docker compose down
-            docker compose up -d --build
+            docker compose build --no-cache
+            docker compose up -d
             
             # Dọn dẹp rác (images cũ) để tránh đầy ổ cứng
             docker image prune -f
