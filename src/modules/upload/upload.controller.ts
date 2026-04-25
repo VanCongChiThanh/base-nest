@@ -7,7 +7,7 @@ import { User } from '../user/entities';
 @Controller('uploads')
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
-
+  // get presigned url for upload file to s3
   @Post('presigned-url')
   async getPresignedUrl(
     @Body() presignedUrlDto: PresignedUrlDto,
