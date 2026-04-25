@@ -12,6 +12,6 @@ export default registerAs('database', () => ({
   password: process.env.DB_PASSWORD || 'postgres',
   database: process.env.DB_DATABASE || 'nestjs_base',
   entities: ['dist/**/*.entity{.ts,.js}'],
-  synchronize: process.env.NODE_ENV !== 'production', // only synchronize in dev
+  synchronize: true,
   logging: false,
 }));
