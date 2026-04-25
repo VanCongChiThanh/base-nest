@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
@@ -9,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { SkillService } from './skill.service';
-import { CreateSkillDto } from './dto';
+import { CreateSkillDto, UpdateSkillDto } from './dto';
 import { Roles, Public } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards';
 import { Role } from '../../common/enums';
@@ -35,6 +36,16 @@ export class SkillController {
   @Public()
   async findById(@Param('id', ParseUUIDPipe) id: string) {
     return this.skillService.findById(id);
+  }
+
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateSkillDto,
+  ) {
+    return this.skillService.update(id, dto);
   }
 
   @Delete(':id')

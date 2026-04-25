@@ -2,8 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JobCategory } from './entities';
-import { CreateJobCategoryDto } from './dto';
-import {
+import { CreateJobCategoryDto, UpdateJobCategoryDto } from './dto';import {
   CATEGORY_ERRORS,
   NotFoundException,
   ConflictException,
@@ -37,6 +36,20 @@ export class JobCategoryService {
       throw new NotFoundException(CATEGORY_ERRORS.CATEGORY_NOT_FOUND);
     }
     return category;
+  }
+
+  async update(id: string, dto: UpdateJobCategoryDto): Promise<JobCategory> {
+    const category = await this.findById(id);
+    if (dto.name && dto.name !== category.name) {
+      const existing = await this.categoryRepository.findOne({
+        where: { name: dto.name },
+      });
+      if (existing) {
+        throw new ConflictException(CATEGORY_ERRORS.CATEGORY_ALREADY_EXISTS);
+      }
+    }
+    Object.assign(category, dto);
+    return this.categoryRepository.save(category);
   }
 
   async delete(id: string): Promise<void> {

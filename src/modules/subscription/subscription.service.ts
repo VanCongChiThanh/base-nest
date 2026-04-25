@@ -37,6 +37,7 @@ interface PlanSeed {
   name: string;
   scope: PlanScope;
   price: number;
+  isActive: boolean;
   maxPostsPerMonth: number;
   postExpiryDays: number;
   featuredPosts: number;
@@ -49,6 +50,7 @@ const PLAN_SEEDS: PlanSeed[] = [
     name: 'Free',
     scope: PlanScope.EMPLOYER,
     price: 0,
+    isActive: true,
     maxPostsPerMonth: 2,
     postExpiryDays: 14,
     featuredPosts: 0,
@@ -57,98 +59,90 @@ const PLAN_SEEDS: PlanSeed[] = [
       'job.apply.daily_limit': 5,
       'chat.enabled': true,
       'ekyc.required_for_sensitive_jobs': true,
+      'ai.job_chatbot.enabled': false,
       'ai.cv_screening.enabled': false,
       'ai.cv_screening.monthly_quota': 0,
-    },
-  },
-  {
-    code: PlanCode.STARTER,
-    name: 'Starter',
-    scope: PlanScope.EMPLOYER,
-    price: 79000,
-    maxPostsPerMonth: 15,
-    postExpiryDays: 30,
-    featuredPosts: 1,
-    featureConfig: {
-      'job.post.max_open_jobs': 3,
-      'job.apply.daily_limit': 30,
-      'chat.enabled': true,
-      'ekyc.required_for_sensitive_jobs': true,
-      'ai.cv_screening.enabled': true,
-      'ai.cv_screening.monthly_quota': 30,
-    },
-  },
-  {
-    code: PlanCode.GROWTH,
-    name: 'Growth',
-    scope: PlanScope.EMPLOYER,
-    price: 199000,
-    maxPostsPerMonth: 60,
-    postExpiryDays: 45,
-    featuredPosts: 3,
-    featureConfig: {
-      'job.post.max_open_jobs': 10,
-      'job.apply.daily_limit': 100,
-      'chat.enabled': true,
-      'ekyc.required_for_sensitive_jobs': true,
-      'ai.cv_screening.enabled': true,
-      'ai.cv_screening.monthly_quota': 120,
-      'ai.interview_summary.enabled': true,
     },
   },
   {
     code: PlanCode.PRO,
     name: 'Pro',
     scope: PlanScope.EMPLOYER,
-    price: 399000,
-    maxPostsPerMonth: 150,
-    postExpiryDays: 60,
-    featuredPosts: 10,
+    price: 59000,
+    isActive: true,
+    maxPostsPerMonth: 10,
+    postExpiryDays: 30,
+    featuredPosts: 1,
     featureConfig: {
-      'job.post.max_open_jobs': 30,
+      'job.post.max_open_jobs': 10,
       'job.apply.daily_limit': 9999,
       'chat.enabled': true,
       'ekyc.required_for_sensitive_jobs': true,
+      'ai.job_chatbot.enabled': true,
       'ai.cv_screening.enabled': true,
-      'ai.cv_screening.monthly_quota': 600,
+      'ai.cv_screening.monthly_quota': 50,
       'ai.interview_summary.enabled': true,
     },
   },
   {
     code: PlanCode.BUSINESS_LITE,
-    name: 'Business Lite',
+    name: 'Employee Basic',
     scope: PlanScope.ORGANIZATION,
     price: 0,
-    maxPostsPerMonth: 20,
+    isActive: true,
+    maxPostsPerMonth: 10,
     postExpiryDays: 30,
-    featuredPosts: 2,
+    featuredPosts: 1,
     featureConfig: {
       'job.post.max_open_jobs': 10,
       'job.apply.daily_limit': 200,
       'chat.enabled': true,
       'ekyc.required_for_sensitive_jobs': true,
-      'ai.cv_screening.enabled': true,
-      'ai.cv_screening.monthly_quota': 200,
-      'ai.interview_summary.enabled': true,
+      'job.post.unlimited': false,
+      'ai.candidate_match.enabled': false,
+      'organization.member_management.enabled': false,
     },
   },
   {
     code: PlanCode.BUSINESS,
-    name: 'Business',
+    name: 'Employee Unlimited',
     scope: PlanScope.ORGANIZATION,
-    price: 899000,
-    maxPostsPerMonth: 200,
+    price: 299000,
+    isActive: true,
+    maxPostsPerMonth: 999999,
     postExpiryDays: 60,
-    featuredPosts: 20,
+    featuredPosts: 10,
     featureConfig: {
-      'job.post.max_open_jobs': 60,
+      'job.post.max_open_jobs': 999999,
       'job.apply.daily_limit': 9999,
       'chat.enabled': true,
       'ekyc.required_for_sensitive_jobs': true,
-      'ai.cv_screening.enabled': true,
-      'ai.cv_screening.monthly_quota': 1200,
-      'ai.interview_summary.enabled': true,
+      'job.post.unlimited': true,
+      'ai.candidate_match.enabled': true,
+      'organization.member_management.enabled': true,
     },
+  },
+  {
+    code: PlanCode.STARTER,
+    name: 'Starter (legacy)',
+    scope: PlanScope.EMPLOYER,
+    price: 79000,
+    isActive: false,
+    maxPostsPerMonth: 15,
+    postExpiryDays: 30,
+    featuredPosts: 1,
+    featureConfig: {},
+  },
+  {
+    code: PlanCode.GROWTH,
+    name: 'Growth (legacy)',
+    scope: PlanScope.EMPLOYER,
+    price: 199000,
+    isActive: false,
+    maxPostsPerMonth: 60,
+    postExpiryDays: 45,
+    featuredPosts: 3,
+    featureConfig: {},
   },
 ];
 
@@ -162,6 +156,8 @@ export class SubscriptionService {
     private readonly payosConf: ConfigType<typeof payosConfig>,
     @InjectRepository(SubscriptionPlan)
     private readonly planRepository: Repository<SubscriptionPlan>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     @InjectRepository(UserSubscription)
     private readonly userSubscriptionRepository: Repository<UserSubscription>,
     @InjectRepository(UsageCounter)
@@ -194,7 +190,15 @@ export class SubscriptionService {
 
       if (!existed) {
         await this.planRepository.save(this.planRepository.create(seed));
+        continue;
       }
+
+      await this.planRepository.save(
+        this.planRepository.create({
+          ...existed,
+          ...seed,
+        }),
+      );
     }
   }
 
@@ -262,6 +266,26 @@ export class SubscriptionService {
 
   async consumeQuota(user: User, quota: ConsumeQuotaConfig): Promise<void> {
     const entitlements = await this.getEntitlementsForUser(user);
+
+    if (quota.counterKey === 'job.post.count' && user.role === Role.USER) {
+      const isEkycVerified =
+        user.verificationLevel === VerificationLevel.BASIC ||
+        user.verificationLevel === VerificationLevel.BUSINESS;
+
+      if (!isEkycVerified) {
+        throw new ForbiddenException(
+          'Bạn cần hoàn tất eKYC trước khi đăng bài tuyển dụng.',
+        );
+      }
+    }
+
+    if (
+      quota.counterKey === 'job.post.count' &&
+      Boolean(entitlements.features?.['job.post.unlimited'])
+    ) {
+      return;
+    }
+
     const featureValue = entitlements.features?.[quota.limitFeatureKey];
     const limit = Number(featureValue ?? 0);
 
@@ -314,31 +338,14 @@ export class SubscriptionService {
       throw new NotFoundException('Plan not found');
     }
 
-    await this.userSubscriptionRepository.update(
-      { userId: targetUserId, status: SubscriptionStatus.ACTIVE },
-      { status: SubscriptionStatus.CANCELLED },
-    );
-
-    const startDate = new Date();
-    const endDate = new Date();
-    endDate.setMonth(endDate.getMonth() + 1);
-
-    const newSubscription = this.userSubscriptionRepository.create({
-      userId: targetUserId,
-      planId: plan.id,
-      startDate,
-      endDate,
-      status: SubscriptionStatus.ACTIVE,
-    });
-
-    await this.userSubscriptionRepository.save(newSubscription);
+    const newSubscription = await this.activatePlanForUser(targetUserId, plan);
 
     return {
       assignedBy: adminId,
       userId: targetUserId,
       planCode: plan.code,
-      startsAt: startDate,
-      endsAt: endDate,
+      startsAt: newSubscription.startDate,
+      endsAt: newSubscription.endDate,
       note: dto.note || null,
     };
   }
@@ -360,12 +367,37 @@ export class SubscriptionService {
   async createCheckout(userId: string, planCode: PlanCode) {
     await this.ensureSeededPlans();
 
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
     const plan = await this.planRepository.findOne({
       where: { code: planCode, isActive: true },
     });
 
     if (!plan) {
       throw new NotFoundException('Plan not found');
+    }
+
+    const expectedScope = this.getScopeByRole(user.role);
+    if (plan.scope !== expectedScope) {
+      throw new ForbiddenException('Plan is not available for your account role');
+    }
+
+    if (
+      user.role === Role.ORGANIZATION &&
+      plan.code === PlanCode.BUSINESS &&
+      this.isInOrganizationTrialWindow(user.createdAt)
+    ) {
+      const subscription = await this.activatePlanForUser(userId, plan);
+      return {
+        checkoutUrl: null,
+        paymentLinkId: null,
+        isTrialUpgrade: true,
+        startsAt: subscription.startDate,
+        endsAt: subscription.endDate,
+      };
     }
 
     if (Number(plan.price) <= 0) {
@@ -489,24 +521,7 @@ export class SubscriptionService {
     });
 
     if (plan) {
-      await this.userSubscriptionRepository.update(
-        { userId: paymentOrder.userId, status: SubscriptionStatus.ACTIVE },
-        { status: SubscriptionStatus.CANCELLED },
-      );
-
-      const startDate = new Date();
-      const endDate = new Date();
-      endDate.setMonth(endDate.getMonth() + 1);
-
-      const newSubscription = this.userSubscriptionRepository.create({
-        userId: paymentOrder.userId,
-        planId: plan.id,
-        startDate,
-        endDate,
-        status: SubscriptionStatus.ACTIVE,
-      });
-
-      await this.userSubscriptionRepository.save(newSubscription);
+      await this.activatePlanForUser(paymentOrder.userId, plan);
       this.logger.log(`Upgraded user ${paymentOrder.userId} to ${plan.code}`);
     }
   }
@@ -527,13 +542,64 @@ export class SubscriptionService {
       activeSubscription.endDate > now &&
       activeSubscription.plan.scope === scope
     ) {
-      return activeSubscription.plan;
+      if (activeSubscription.plan.code) {
+        const codedPlan = await this.planRepository.findOne({
+          where: { code: activeSubscription.plan.code },
+        });
+        if (codedPlan) {
+          return codedPlan;
+        }
+      }
+
+      const mappedCode = this.mapLegacyPlanCode(activeSubscription.plan, scope);
+      if (mappedCode) {
+        const mappedPlan = await this.planRepository.findOne({
+          where: { code: mappedCode },
+        });
+        if (mappedPlan) {
+          return mappedPlan;
+        }
+      }
     }
 
     const fallbackCode =
       scope === PlanScope.ORGANIZATION ? PlanCode.BUSINESS_LITE : PlanCode.FREE;
 
     return this.planRepository.findOne({ where: { code: fallbackCode } });
+  }
+
+  private mapLegacyPlanCode(
+    plan: SubscriptionPlan,
+    scope: PlanScope,
+  ): PlanCode | null {
+    const normalizedName = (plan.name || '').trim().toLowerCase();
+    const price = Number(plan.price || 0);
+
+    if (scope === PlanScope.ORGANIZATION) {
+      return price > 0 ? PlanCode.BUSINESS : PlanCode.BUSINESS_LITE;
+    }
+
+    if (
+      normalizedName.includes('free') ||
+      normalizedName.includes('miễn phí') ||
+      normalizedName.includes('mien phi')
+    ) {
+      return PlanCode.FREE;
+    }
+
+    if (
+      normalizedName.includes('pro') ||
+      normalizedName.includes('starter') ||
+      normalizedName.includes('growth') ||
+      normalizedName.includes('cơ bản') ||
+      normalizedName.includes('co ban') ||
+      normalizedName.includes('chuyên nghiệp') ||
+      normalizedName.includes('chuyen nghiep')
+    ) {
+      return PlanCode.PRO;
+    }
+
+    return price > 0 ? PlanCode.PRO : PlanCode.FREE;
   }
 
   private getScopeByRole(role: Role): PlanScope {
@@ -546,6 +612,36 @@ export class SubscriptionService {
     }
 
     return PlanScope.EMPLOYER;
+  }
+
+  private isInOrganizationTrialWindow(createdAt: Date): boolean {
+    const trialEnd = new Date(createdAt);
+    trialEnd.setMonth(trialEnd.getMonth() + 3);
+    return new Date() < trialEnd;
+  }
+
+  private async activatePlanForUser(
+    userId: string,
+    plan: SubscriptionPlan,
+  ): Promise<UserSubscription> {
+    await this.userSubscriptionRepository.update(
+      { userId, status: SubscriptionStatus.ACTIVE },
+      { status: SubscriptionStatus.CANCELLED },
+    );
+
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setMonth(endDate.getMonth() + 1);
+
+    const newSubscription = this.userSubscriptionRepository.create({
+      userId,
+      planId: plan.id,
+      startDate,
+      endDate,
+      status: SubscriptionStatus.ACTIVE,
+    });
+
+    return this.userSubscriptionRepository.save(newSubscription);
   }
 
   private buildPeriodKey(period: 'daily' | 'monthly'): string {

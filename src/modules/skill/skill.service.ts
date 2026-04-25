@@ -2,8 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Skill } from './entities';
-import { CreateSkillDto } from './dto';
-import {
+import { CreateSkillDto, UpdateSkillDto } from './dto';import {
   SKILL_ERRORS,
   NotFoundException,
   ConflictException,
@@ -37,6 +36,20 @@ export class SkillService {
       throw new NotFoundException(SKILL_ERRORS.SKILL_NOT_FOUND);
     }
     return skill;
+  }
+
+  async update(id: string, dto: UpdateSkillDto): Promise<Skill> {
+    const skill = await this.findById(id);
+    if (dto.name && dto.name !== skill.name) {
+      const existing = await this.skillRepository.findOne({
+        where: { name: dto.name },
+      });
+      if (existing) {
+        throw new ConflictException(SKILL_ERRORS.SKILL_ALREADY_EXISTS);
+      }
+    }
+    Object.assign(skill, dto);
+    return this.skillRepository.save(skill);
   }
 
   async delete(id: string): Promise<void> {

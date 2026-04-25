@@ -17,10 +17,12 @@ import {
   AssignmentStatus,
   NotificationType,
   PrivacyVisibility,
+  JobType,
 } from '../../common/enums';
 import { NotificationHelper } from '../notification';
 import { EmployerProfile, WorkerProfile } from '../profile/entities';
 import { EmployerBadge } from '../../common/enums/employer-badge.enum';
+import { AiSyncCronService } from '../ai/ai-sync-cron.service';
 
 export interface ProgressStep {
   key: string;
@@ -68,6 +70,7 @@ export class JobService {
     @InjectRepository(WorkerProfile)
     private readonly workerProfileRepository: Repository<WorkerProfile>,
     private readonly notificationHelper: NotificationHelper,
+    private readonly aiSyncCronService: AiSyncCronService,
   ) {}
 
   // ==================== JOB CRUD ====================
@@ -92,7 +95,14 @@ export class JobService {
       await this.jobSkillRepository.save(jobSkills);
     }
 
-    return this.findJobById(saved.id);
+    const fullJob = await this.findJobById(saved.id);
+
+    // Enqueue AI embedding in background (non-blocking)
+    this.aiSyncCronService.enqueueJobSync(saved.id).catch((err) =>
+      console.warn('Failed to enqueue AI embedding for job:', err?.message),
+    );
+
+    return fullJob;
   }
 
   async findJobs(
@@ -135,6 +145,9 @@ export class JobService {
         '(job.title ILIKE :search OR job.description ILIKE :search)',
         { search: `%${search}%` },
       );
+    }
+    if (filter.jobType) {
+      qb.andWhere('job.jobType = :jobType', { jobType: filter.jobType });
     }
 
     let hasLocationFilter = false;
@@ -265,6 +278,10 @@ export class JobService {
         { jobTitle: job.title },
       );
     }
+
+    this.aiSyncCronService.enqueueJobSync(jobId).catch((err) =>
+      console.warn('Failed to enqueue AI embedding for cancelled job:', err?.message),
+    );
 
     return saved;
   }
@@ -400,6 +417,9 @@ export class JobService {
       await this.jobRepository.update(application.jobId, {
         status: JobStatus.CLOSED,
       });
+      this.aiSyncCronService.enqueueJobSync(application.jobId).catch((err) =>
+        console.warn('Failed to enqueue AI embedding for closed job:', err?.message),
+      );
     }
 
     await this.notificationHelper.send(
@@ -516,6 +536,12 @@ export class JobService {
     if (!assignment) {
       throw new NotFoundException(APPLICATION_ERRORS.APPLICATION_NOT_FOUND);
     }
+    if (assignment.job.jobType && assignment.job.jobType !== JobType.GIG) {
+      throw new BadRequestException({
+        code: 'CHECK_IN_ONLY_GIG',
+        message: 'Check-in only applies to GIG jobs',
+      });
+    }
     if (assignment.status !== AssignmentStatus.ASSIGNED) {
       throw new BadRequestException(
         APPLICATION_ERRORS.ASSIGNMENT_MUST_BE_ASSIGNED,
@@ -546,9 +572,16 @@ export class JobService {
     if (!assignment) {
       throw new NotFoundException(APPLICATION_ERRORS.APPLICATION_NOT_FOUND);
     }
-    if (assignment.status !== AssignmentStatus.IN_PROGRESS) {
+    const isGig = assignment.job.jobType === JobType.GIG || !assignment.job.jobType;
+    const canComplete =
+      assignment.status === AssignmentStatus.IN_PROGRESS ||
+      (!isGig && assignment.status === AssignmentStatus.ASSIGNED);
+
+    if (!canComplete) {
       throw new BadRequestException(
-        APPLICATION_ERRORS.ASSIGNMENT_MUST_BE_IN_PROGRESS,
+        !isGig
+          ? APPLICATION_ERRORS.ASSIGNMENT_MUST_BE_ASSIGNED
+          : APPLICATION_ERRORS.ASSIGNMENT_MUST_BE_IN_PROGRESS,
       );
     }
 
@@ -602,7 +635,11 @@ export class JobService {
     });
 
     // Build steps
-    const steps = this.buildProgressSteps(application, assignment ?? null);
+    const steps = this.buildProgressSteps(
+      application,
+      assignment ?? null,
+      application.job.jobType || JobType.GIG,
+    );
     const currentStep = steps.filter((s) => s.status === 'done').length;
 
     // Worker profile with privacy filter
@@ -703,11 +740,12 @@ export class JobService {
   private buildProgressSteps(
     application: JobApplication,
     assignment: JobAssignment | null,
+    jobType: JobType,
   ): ProgressStep[] {
     const isCancelled = application.status === ApplicationStatus.CANCELLED;
     const isRejected = application.status === ApplicationStatus.REJECTED;
 
-    const steps: ProgressStep[] = [
+    const baseSteps: ProgressStep[] = [
       {
         key: 'APPLIED',
         label: 'Đã ứng tuyển',
@@ -738,39 +776,96 @@ export class JobService {
               : 'pending',
         timestamp: application.respondedAt,
       },
-      {
-        key: 'CHECKED_IN',
-        label: 'Check-in làm việc',
-        status: assignment?.checkedInAt
-          ? 'done'
-          : assignment?.status === AssignmentStatus.ASSIGNED
-            ? 'active'
-            : 'pending',
-        timestamp: assignment?.checkedInAt ?? null,
-      },
-      {
-        key: 'IN_PROGRESS',
-        label: 'Đang làm việc',
-        status:
-          assignment?.status === AssignmentStatus.IN_PROGRESS
-            ? 'active'
-            : assignment?.status === AssignmentStatus.COMPLETED
-              ? 'done'
-              : 'pending',
-        timestamp: assignment?.startedAt ?? null,
-      },
-      {
-        key: 'COMPLETED',
-        label: 'Hoàn thành',
-        status:
-          assignment?.status === AssignmentStatus.COMPLETED
-            ? 'done'
-            : 'pending',
-        timestamp: assignment?.completedAt ?? null,
-      },
     ];
 
-    return steps;
+    if (jobType === JobType.GIG) {
+      return [
+        ...baseSteps,
+        {
+          key: 'CHECKED_IN',
+          label: 'Check-in làm việc',
+          status: assignment?.checkedInAt
+            ? 'done'
+            : assignment?.status === AssignmentStatus.ASSIGNED
+              ? 'active'
+              : 'pending',
+          timestamp: assignment?.checkedInAt ?? null,
+        },
+        {
+          key: 'IN_PROGRESS',
+          label: 'Đang làm việc',
+          status:
+            assignment?.status === AssignmentStatus.IN_PROGRESS
+              ? 'active'
+              : assignment?.status === AssignmentStatus.COMPLETED
+                ? 'done'
+                : 'pending',
+          timestamp: assignment?.startedAt ?? null,
+        },
+        {
+          key: 'COMPLETED',
+          label: 'Hoàn thành',
+          status:
+            assignment?.status === AssignmentStatus.COMPLETED
+              ? 'done'
+              : 'pending',
+          timestamp: assignment?.completedAt ?? null,
+        },
+      ];
+    } else if (jobType === JobType.PART_TIME) {
+      return [
+        ...baseSteps,
+        {
+          key: 'IN_PROGRESS',
+          label: 'Đang làm việc',
+          status:
+            assignment?.status === AssignmentStatus.IN_PROGRESS
+              ? 'active'
+              : assignment?.status === AssignmentStatus.COMPLETED
+                ? 'done'
+                : assignment?.status === AssignmentStatus.ASSIGNED
+                  ? 'active' // Auto active once accepted
+                  : 'pending',
+          timestamp: assignment?.startedAt ?? null,
+        },
+        {
+          key: 'COMPLETED',
+          label: 'Kết thúc hợp đồng',
+          status:
+            assignment?.status === AssignmentStatus.COMPLETED
+              ? 'done'
+              : 'pending',
+          timestamp: assignment?.completedAt ?? null,
+        },
+      ];
+    } else {
+      // ONLINE
+      return [
+        ...baseSteps,
+        {
+          key: 'MILESTONES',
+          label: 'Thực hiện Milestones',
+          status:
+            assignment?.status === AssignmentStatus.IN_PROGRESS
+              ? 'active'
+              : assignment?.status === AssignmentStatus.COMPLETED
+                ? 'done'
+                : assignment?.status === AssignmentStatus.ASSIGNED
+                  ? 'active'
+                  : 'pending',
+          timestamp: assignment?.startedAt ?? null,
+        },
+        {
+          key: 'COMPLETED',
+          label: 'Hoàn thành toàn bộ',
+          status:
+            assignment?.status === AssignmentStatus.COMPLETED
+              ? 'done'
+              : 'pending',
+          timestamp: assignment?.completedAt ?? null,
+        },
+      ];
+    }
   }
 
   private buildWorkerInfo(

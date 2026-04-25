@@ -63,7 +63,12 @@ export class AuthService {
     await this.userService.updateInternal(user.id, { verificationToken });
 
     // Send verification email
-    await this.mailService.sendVerificationEmail(user.email, verificationToken);
+    try {
+      await this.mailService.sendVerificationEmail(user.email, verificationToken);
+    } catch (error) {
+      console.error('Lỗi khi gửi email xác thực:', error);
+      // Tiếp tục thành công, không ném ra 500 error. Admin có thể debug SMTP sau.
+    }
 
     return {
       message:
@@ -287,7 +292,11 @@ export class AuthService {
     });
 
     // Gửi email
-    await this.mailService.sendResetPasswordEmail(user.email, resetToken);
+    try {
+      await this.mailService.sendResetPasswordEmail(user.email, resetToken);
+    } catch (error) {
+      console.error('Lỗi khi gửi email reset mật khẩu:', error);
+    }
 
     return {
       message: 'If the email exists, you will receive a password reset link',

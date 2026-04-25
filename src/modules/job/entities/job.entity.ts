@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 import { User } from '../../user/entities';
 import { JobCategory } from '../../job-category/entities';
-import { JobStatus, JobSalaryType } from '../../../common/enums';
+import { JobStatus, JobSalaryType, JobType } from '../../../common/enums';
 import { JobSkill } from './job-skill.entity';
 import { JobApplication } from './job-application.entity';
 
@@ -80,10 +80,40 @@ export class Job {
 
   @Column({
     type: 'enum',
+    enum: JobType,
+    default: JobType.GIG,
+  })
+  jobType: JobType;
+
+  @Column({
+    type: 'enum',
     enum: JobStatus,
     default: JobStatus.OPEN,
   })
   status: JobStatus;
+
+  // === Part-time fields ===
+  @Column({ name: 'contract_duration', nullable: true })
+  contractDuration: string;
+
+  @Column({ name: 'work_schedule', nullable: true })
+  workSchedule: string;
+
+  @Column({ name: 'payment_note', type: 'text', nullable: true })
+  paymentNote: string;
+
+  // === Online fields ===
+  @Column({
+    name: 'total_budget',
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    nullable: true,
+  })
+  totalBudget: number;
+
+  @Column({ name: 'deliverable_type', nullable: true })
+  deliverableType: string;
 
   @OneToMany(() => JobSkill, (js) => js.job)
   jobSkills: JobSkill[];

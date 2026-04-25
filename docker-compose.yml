@@ -1,6 +1,38 @@
 services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nestjs_api
+    restart: unless-stopped
+    # Ẩn cổng 3000 khỏi Internet, chỉ để các container nói chuyện với nhau
+    expose:
+      - '3000'
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy_proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data       # Lưu trữ chứng chỉ SSL để không bị xin lại khi restart
+      - caddy_config:/config
+    depends_on:
+      - api
+    # Lệnh thần thánh: Tự động xin HTTPS và trỏ về NestJS
+    command: caddy reverse-proxy --from https://api-coursevo-dev.id.vn --to http://api:3000
+
   postgres:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg16
     container_name: nestjs_postgres
     environment:
       POSTGRES_USER: postgres
@@ -11,6 +43,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -20,7 +57,14 @@ services:
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
   redis_data:
+  caddy_data:
+  caddy_config:

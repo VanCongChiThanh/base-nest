@@ -1,5 +1,6 @@
-import { IsOptional, IsNumber, IsString } from 'class-validator';
+import { IsOptional, IsNumber, IsString, IsEnum } from 'class-validator';
 import { Type } from 'class-transformer';
+import { JobType } from '../../../common/enums';
 
 export class JobFilterDto {
   @IsOptional()
@@ -44,6 +45,10 @@ export class JobFilterDto {
   sortOrder?: 'ASC' | 'DESC';
 
   @IsOptional()
+  @IsEnum(JobType)
+  jobType?: JobType;
+
+  @IsOptional()
   @IsNumber()
   @Type(() => Number)
   latitude?: number;
@@ -57,4 +62,5 @@ export class JobFilterDto {
   @IsNumber()
   @Type(() => Number)
   radius?: number;
+
 }

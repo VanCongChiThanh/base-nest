@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ConfigType } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullModule } from '@nestjs/bull';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
 import { join } from 'node:path';
 
@@ -15,6 +17,7 @@ import {
   mailConfig,
   ekycConfig,
   payosConfig,
+  geminiConfig,
 } from './config';
 
 // Common imports
@@ -38,13 +41,15 @@ import { PaymentModule } from './modules/payment';
 import { VerificationModule } from './modules/verification';
 import { SubscriptionModule } from './modules/subscription';
 import { EkycModule } from './modules/ekyc';
+import { AdminModule } from './modules/admin';
+import { AiModule } from './modules/ai';
+import { WorkerServiceModule } from './modules/worker-service/worker-service.module';
 
 @Module({
   imports: [
     // Config Module - Load environment variables
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [join(__dirname, '../.env')],
       load: [
         databaseConfig,
         redisConfig,
@@ -54,6 +59,7 @@ import { EkycModule } from './modules/ekyc';
         mailConfig,
         ekycConfig,
         payosConfig,
+        geminiConfig,
       ],
     }),
 
@@ -72,6 +78,20 @@ import { EkycModule } from './modules/ekyc';
         logging: dbConf.logging,
       }),
     }),
+    
+    // Bull Queue - dùng Redis cho async embedding jobs
+    BullModule.forRootAsync({
+      inject: [redisConfig.KEY],
+      useFactory: (redisCfg: ConfigType<typeof redisConfig>) => ({
+        redis: {
+          host: redisCfg.host,
+          port: redisCfg.port,
+        },
+      }),
+    }),
+
+    // Schedule Module - Cron Jobs
+    ScheduleModule.forRoot(),
 
     // Feature Modules
     RedisModule,
@@ -91,6 +111,9 @@ import { EkycModule } from './modules/ekyc';
     VerificationModule,
     SubscriptionModule,
     EkycModule,
+    AdminModule,
+    AiModule,
+    WorkerServiceModule,
   ],
   providers: [
     // Global JWT Guard - Áp dụng cho tất cả endpoints (trừ @Public())

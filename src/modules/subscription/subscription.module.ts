@@ -6,6 +6,7 @@ import {
   UsageCounter,
   UserSubscription,
 } from './entities';
+import { User } from '../user/entities';
 import { SubscriptionController } from './subscription.controller';
 import { SubscriptionService } from './subscription.service';
 
@@ -16,6 +17,7 @@ import { SubscriptionService } from './subscription.service';
       UserSubscription,
       UsageCounter,
       PaymentOrder,
+      User,
     ]),
   ],
   controllers: [SubscriptionController],

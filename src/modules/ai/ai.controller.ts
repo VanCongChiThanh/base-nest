@@ -1,0 +1,234 @@
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  Query,
+  ParseUUIDPipe,
+  Delete,
+  HttpCode,
+  InternalServerErrorException,
+  UseGuards,
+  Res,
+} from '@nestjs/common';
+import type { Response } from 'express';
+import { AiChatbotService } from './ai-chatbot.service';
+import { AiSyncCronService } from './ai-sync-cron.service';
+import { ScamDetectorService, ScamAnalysisResult } from './scam-detector.service';
+import { AiChatDto, AnalyzeJobDto, AnalyzeJobContentDto } from './dto';
+import { JwtAuthGuard } from '../../common/guards';
+import {
+  CurrentUser,
+  Roles,
+  Public,
+  RequireFeature,
+} from '../../common/decorators';
+import { User } from '../user/entities';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { SavedJob } from './entities';
+import { Job } from '../job/entities';
+import { NotFoundException, JOB_ERRORS } from '../../common';
+import { Role } from '../../common/enums';
+
+@Controller('ai')
+export class AiController {
+  constructor(
+    private readonly chatbotService: AiChatbotService,
+    private readonly scamDetectorService: ScamDetectorService,
+    private readonly aiSyncCronService: AiSyncCronService,
+    @InjectRepository(SavedJob)
+    private readonly savedJobRepo: Repository<SavedJob>,
+    @InjectRepository(Job)
+    private readonly jobRepo: Repository<Job>,
+  ) { }
+
+  // ==================== AI CHATBOT ====================
+
+  @Post('chat')
+  @RequireFeature({ key: 'ai.job_chatbot.enabled' })
+  async chat(@CurrentUser() user: User, @Body() dto: AiChatDto) {
+    return this.chatbotService.chat(user.id, dto.message, dto.sessionId);
+  }
+
+  @Post('chat-stream')
+  @RequireFeature({ key: 'ai.job_chatbot.enabled' })
+  async chatStream(
+    @CurrentUser() user: User,
+    @Body() dto: AiChatDto,
+    @Res() res: Response,
+  ) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    try {
+      const stream = this.chatbotService.chatStream(user.id, dto.message, dto.sessionId);
+      for await (const chunk of stream) {
+        // Send each chunk as an SSE data payload
+        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+      }
+      res.write('data: [DONE]\n\n');
+      res.end();
+    } catch (err) {
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    }
+  }
+
+  @Get('chat/suggestions')
+  getSuggestions() {
+    return this.chatbotService.getSuggestions();
+  }
+
+  @Get('chat/history')
+  @RequireFeature({ key: 'ai.job_chatbot.enabled' })
+  async getChatHistory(
+    @CurrentUser() user: User,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.chatbotService.getChatHistory(user.id, page, limit);
+  }
+
+  @Get('chat/sessions/:id')
+  @RequireFeature({ key: 'ai.job_chatbot.enabled' })
+  async getChatSession(
+    @CurrentUser() user: User,
+    @Param('id', ParseUUIDPipe) sessionId: string,
+  ) {
+    return this.chatbotService.getSession(sessionId, user.id);
+  }
+
+  // ==================== AI SEARCH CANDIDATES ====================
+
+  @UseGuards(JwtAuthGuard)
+  @Get('search-candidates')
+  @RequireFeature({ key: 'ai.candidate_match.enabled' })
+  async searchCandidates(@Query('q') q: string) {
+    if (!q || q.trim() === '') {
+      return [];
+    }
+    return this.chatbotService.searchCandidates(q);
+  }
+
+  // ==================== MANUAL SYNC ====================
+
+  @Public()
+  @Post('dev-sync')
+  async triggerDevSync() {
+    await this.aiSyncCronService.enqueueBatchSync();
+    return { success: true, message: 'Đã đưa yêu cầu đồng bộ toàn bộ vào hàng đợi. Kiểm tra logs để theo dõi.' };
+  }
+
+  @Post('sync-jobs')
+  @Roles(Role.ADMIN)
+  @HttpCode(200)
+  async manualSyncJobs() {
+    return this.aiSyncCronService.syncJobsToVectorDb();
+  }
+
+  @Public()
+  @Get('queue-status')
+  async getQueueStatus() {
+    return this.aiSyncCronService.getQueueStatus();
+  }
+
+  // ==================== SCAM DETECTION ====================
+
+  @Post('analyze-job')
+  async analyzeJobById(
+    @Body() dto: AnalyzeJobDto,
+  ): Promise<ScamAnalysisResult> {
+    const job = await this.jobRepo.findOne({
+      where: { id: dto.jobId },
+      relations: ['employer'],
+    });
+    if (!job) {
+      throw new NotFoundException(JOB_ERRORS.JOB_NOT_FOUND);
+    }
+    return this.scamDetectorService.analyzeJob({
+      title: job.title,
+      description: job.description,
+      companyName: job.employer?.firstName
+        ? `${job.employer.firstName} ${job.employer.lastName}`
+        : undefined,
+      salary: job.salaryPerHour,
+      address: job.address,
+    });
+  }
+
+  @Post('analyze-job-content')
+  async analyzeJobContent(
+    @Body() dto: AnalyzeJobContentDto,
+  ): Promise<ScamAnalysisResult> {
+    return this.scamDetectorService.analyzeJob({
+      title: dto.title,
+      description: dto.description,
+      companyName: dto.companyName,
+      salary: dto.salary,
+      address: dto.address,
+    });
+  }
+
+  // ==================== SAVED JOBS ====================
+
+  @Post('saved-jobs/:jobId')
+  async saveJob(
+    @CurrentUser() user: User,
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+  ) {
+    const existing = await this.savedJobRepo.findOne({
+      where: { userId: user.id, jobId },
+    });
+    if (existing) {
+      return { saved: true, message: 'Already saved' };
+    }
+    await this.savedJobRepo.save(
+      this.savedJobRepo.create({ userId: user.id, jobId }),
+    );
+    return { saved: true };
+  }
+
+  @Delete('saved-jobs/:jobId')
+  async unsaveJob(
+    @CurrentUser() user: User,
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+  ) {
+    await this.savedJobRepo.delete({ userId: user.id, jobId });
+    return { saved: false };
+  }
+
+  @Get('saved-jobs')
+  async getSavedJobs(
+    @CurrentUser() user: User,
+    @Query('page') page = 1,
+    @Query('limit') limit = 10,
+  ) {
+    const [data, total] = await this.savedJobRepo.findAndCount({
+      where: { userId: user.id },
+      relations: ['job', 'job.employer', 'job.category', 'job.jobSkills', 'job.jobSkills.skill'],
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return {
+      data: data.map((s) => s.job),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  @Get('saved-jobs/check/:jobId')
+  async checkSaved(
+    @CurrentUser() user: User,
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+  ) {
+    const exists = await this.savedJobRepo.findOne({
+      where: { userId: user.id, jobId },
+    });
+    return { saved: !!exists };
+  }
+}

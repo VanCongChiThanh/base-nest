@@ -9,7 +9,7 @@ import {
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { JobSalaryType } from '../../../common/enums';
+import { JobSalaryType, JobType } from '../../../common/enums';
 
 export class CreateJobDto {
   @IsString()
@@ -70,4 +70,32 @@ export class CreateJobDto {
   @IsArray()
   @IsUUID('4', { each: true })
   skillIds?: string[];
+
+  // === Job Type ===
+  @IsOptional()
+  @IsString()
+  jobType?: JobType;
+
+  // === Part-time fields ===
+  @IsOptional()
+  @IsString()
+  contractDuration?: string;
+
+  @IsOptional()
+  @IsString()
+  workSchedule?: string;
+
+  @IsOptional()
+  @IsString()
+  paymentNote?: string;
+
+  // === Online fields ===
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  totalBudget?: number;
+
+  @IsOptional()
+  @IsString()
+  deliverableType?: string;
 }

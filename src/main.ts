@@ -1,3 +1,4 @@
+process.env.TZ = 'UTC';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';

@@ -1,4 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException as NestBadRequestException,
+  Injectable,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities';
@@ -9,6 +12,7 @@ import {
   NotFoundException,
   ConflictException,
   AuthProvider,
+  Role,
 } from '../../common';
 
 @Injectable()
@@ -166,8 +170,12 @@ export class UserService {
    * Update user role (Admin)
    */
   async updateRole(id: string, role: string): Promise<User> {
+    if (!Object.values(Role).includes(role as Role)) {
+      throw new NestBadRequestException('Invalid role value');
+    }
+
     const user = await this.findById(id);
-    user.role = role as any;
+    user.role = role as Role;
     return this.userRepository.save(user);
   }
 

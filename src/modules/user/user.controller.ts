@@ -31,6 +31,24 @@ export class UserController {
   }
 
   /**
+   * GET /users/:id/public - public profile
+   */
+  @Get(':id/public')
+  async getPublicProfile(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<Partial<UserResponseDto>> {
+    const user = await this.userService.findById(id);
+    // Return only safe fields
+    return {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      avatarUrl: user.avatarUrl,
+      createdAt: user.createdAt,
+    } as any;
+  }
+
+  /**
    * PATCH /users/me - Update profile current user
    */
   @Patch('me')

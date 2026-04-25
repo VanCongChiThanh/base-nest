@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log
+dist
+.git
+.github
+.env
+.env.*
+*.md
+test
+coverage
+.vscode
+temp_ocr.json

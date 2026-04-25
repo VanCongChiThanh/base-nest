@@ -14,3 +14,4 @@ export * from './privacy-visibility.enum';
 export * from './job-salary-type.enum';
 export * from './plan-code.enum';
 export * from './plan-scope.enum';
+export * from './job-type.enum';

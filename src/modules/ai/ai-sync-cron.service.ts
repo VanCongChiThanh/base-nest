@@ -1,0 +1,166 @@
+import { Injectable, Logger, InternalServerErrorException, BadRequestException } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { InjectQueue } from '@nestjs/bull';
+import Bull from 'bull';
+import {
+  AI_EMBEDDING_QUEUE,
+  EmbeddingJobName,
+} from './ai-embedding.constants';
+
+/**
+ * Cron job that dispatches batch-sync to the Bull queue.
+ * Also exposes helper methods to enqueue single-item syncs
+ * from other services (e.g. JobService on create/update).
+ */
+@Injectable()
+export class AiSyncCronService {
+  private readonly logger = new Logger(AiSyncCronService.name);
+
+  constructor(
+    @InjectQueue(AI_EMBEDDING_QUEUE)
+    private readonly embeddingQueue: Bull.Queue,
+  ) {}
+
+  // ─── Cron: dispatch batch sync every hour ──────────────────────
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async handleCronSync() {
+    this.logger.log('Cron tick → dispatching batch-sync-all to queue');
+    await this.enqueueBatchSync();
+  }
+
+  // ─── Public helpers – called from other services ───────────────
+
+  /** Enqueue embedding for a single job (create / update) */
+  async enqueueJobSync(jobId: string) {
+    await this.embeddingQueue.add(
+      EmbeddingJobName.SYNC_JOB,
+      { jobId },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      },
+    );
+    this.logger.debug(`Enqueued SYNC_JOB for ${jobId}`);
+  }
+
+  /** Enqueue embedding for a single worker service */
+  async enqueueWorkerServiceSync(workerServiceId: string) {
+    await this.embeddingQueue.add(
+      EmbeddingJobName.SYNC_WORKER_SERVICE,
+      { workerServiceId },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      },
+    );
+    this.logger.debug(`Enqueued SYNC_WORKER_SERVICE for ${workerServiceId}`);
+  }
+
+  /** Deactivate embedding when a job is closed */
+  async enqueueJobRemoval(jobId: string) {
+    await this.embeddingQueue.add(
+      EmbeddingJobName.REMOVE_JOB,
+      { jobId },
+      {
+        attempts: 2,
+        removeOnComplete: true,
+      },
+    );
+    this.logger.debug(`Enqueued REMOVE_JOB for ${jobId}`);
+  }
+
+  /** Sync a single job into graph_knowledge */
+  async enqueueGraphJobSync(jobId: string) {
+    await this.embeddingQueue.add(
+      EmbeddingJobName.SYNC_GRAPH_JOB,
+      { jobId },
+      { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, removeOnComplete: true },
+    );
+    this.logger.debug(`Enqueued SYNC_GRAPH_JOB for ${jobId}`);
+  }
+
+  /** Sync a single worker service into graph_knowledge */
+  async enqueueGraphWorkerSync(workerServiceId: string) {
+    await this.embeddingQueue.add(
+      EmbeddingJobName.SYNC_GRAPH_WORKER,
+      { workerServiceId },
+      { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, removeOnComplete: true },
+    );
+    this.logger.debug(`Enqueued SYNC_GRAPH_WORKER for ${workerServiceId}`);
+  }
+
+  /** Deactivate a graph_knowledge node */
+  async enqueueGraphNodeRemoval(sourceId: string) {
+    await this.embeddingQueue.add(
+      EmbeddingJobName.REMOVE_GRAPH_NODE,
+      { sourceId },
+      { attempts: 2, removeOnComplete: true },
+    );
+    this.logger.debug(`Enqueued REMOVE_GRAPH_NODE for ${sourceId}`);
+  }
+
+  /** Full batch sync (called by cron or manual trigger) */
+  async enqueueBatchSync() {
+    // Trong lúc code Dev (dev server restart), các job cũ có thể kẹt ở trạng thái 'active'.
+    // Để tránh việc kẹt vĩnh viễn, ta chỉ rào các job 'waiting' và 'delayed'
+    const jobs = await this.embeddingQueue.getJobs(['waiting', 'delayed']);
+
+    const isAlreadyQueued = jobs.some(
+      (job) => job.name === EmbeddingJobName.BATCH_SYNC_ALL,
+    );
+
+    if (isAlreadyQueued) {
+      this.logger.warn('BATCH_SYNC_ALL is already in queue or processing. Skipping.');
+      throw new BadRequestException('Tiến trình đồng bộ đang chạy. Vui lòng đợi trong giây lát...');
+    }
+
+    await this.embeddingQueue.add(
+      EmbeddingJobName.BATCH_SYNC_ALL,
+      {},
+      {
+        attempts: 1,
+        removeOnComplete: true,
+        removeOnFail: false,
+      },
+    );
+    this.logger.log('Enqueued BATCH_SYNC_ALL');
+    return { message: 'Đã đưa yêu cầu đồng bộ toàn bộ vào hàng đợi.' };
+  }
+
+  // ─── Legacy wrappers for existing controller endpoints ─────────
+
+  async syncJobsToVectorDb() {
+    return this.enqueueBatchSync();
+  }
+
+  async syncWorkerServicesToVectorDb() {
+    return this.enqueueBatchSync();
+  }
+
+  // ─── Debug / Status ────────────────────────────────────────────
+
+  async getQueueStatus() {
+    const [waiting, active, delayed, completed, failed] = await Promise.all([
+      this.embeddingQueue.getWaiting(),
+      this.embeddingQueue.getActive(),
+      this.embeddingQueue.getDelayed(),
+      this.embeddingQueue.getCompleted(),
+      this.embeddingQueue.getFailed(),
+    ]);
+
+    const mapJob = (j: Bull.Job) => ({ id: j.id, name: j.name, data: j.data, status: j.finishedOn ? 'completed' : 'unknown' });
+
+    return {
+      waiting: waiting.map(mapJob),
+      active: active.map(mapJob),
+      delayed: delayed.map(mapJob),
+      completed: completed.map(mapJob),
+      failed: failed.map(mapJob),
+    };
+  }
+}

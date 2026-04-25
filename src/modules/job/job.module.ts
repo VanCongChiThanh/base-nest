@@ -16,6 +16,7 @@ import {
 import { NotificationModule } from '../notification';
 import { EmployerProfile, WorkerProfile } from '../profile/entities';
 import { UserModule } from '../user/user.module';
+import { AiModule } from '../ai';
 import jwtConfig from '../../config/jwt.config';
 
 @Module({
@@ -37,6 +38,7 @@ import jwtConfig from '../../config/jwt.config';
     ]),
     NotificationModule,
     UserModule,
+    AiModule,
   ],
   controllers: [JobController],
   providers: [JobService, ApplicationChatService, ApplicationChatGateway],
