@@ -1,17 +1,15 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, InternalServerErrorException } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { v4 as uuidv4 } from 'uuid';
+import { v2 as cloudinary } from 'cloudinary';
 import { PresignedUrlDto, PresignedUrlResponseDto } from './dto';
 import { UPLOAD_ERRORS, BadRequestException } from '../../common';
-import awsConfig from '../../config/aws.config';
+import cloudinaryConfig from '../../config/cloudinary.config';
 
 @Injectable()
 export class UploadService {
-  private readonly s3Client: S3Client;
-  private readonly bucketName: string;
-  private readonly region: string;
+  private readonly cloudName: string;
+  private readonly apiKey: string;
+  private readonly apiSecret: string;
 
   // list of allowed mime types
   private readonly allowedMimeTypes = [
@@ -28,23 +26,27 @@ export class UploadService {
   private readonly maxFileSize = 10 * 1024 * 1024;
 
   constructor(
-    @Inject(awsConfig.KEY)
-    private readonly awsConf: ConfigType<typeof awsConfig>,
+    @Inject(cloudinaryConfig.KEY)
+    private readonly cloudinaryConf: ConfigType<typeof cloudinaryConfig>,
   ) {
-    this.region = this.awsConf.region;
-    this.bucketName = this.awsConf.s3Bucket || '';
+    this.cloudName = this.cloudinaryConf.cloudName || '';
+    this.apiKey = this.cloudinaryConf.apiKey || '';
+    this.apiSecret = this.cloudinaryConf.apiSecret || '';
 
-    this.s3Client = new S3Client({
-      region: this.region,
-      credentials: {
-        accessKeyId: this.awsConf.accessKeyId || '',
-        secretAccessKey: this.awsConf.secretAccessKey || '',
-      },
+    if (!this.cloudName || !this.apiKey || !this.apiSecret) {
+      console.warn('Cloudinary configuration is missing. Upload feature might fail.');
+    }
+
+    cloudinary.config({
+      cloud_name: this.cloudName,
+      api_key: this.apiKey,
+      api_secret: this.apiSecret,
+      secure: true,
     });
   }
 
   /**
-   * Create presigned URL for file upload
+   * Create presigned URL (signature) for Cloudinary upload
    */
   async generatePresignedUrl(
     presignedUrlDto: PresignedUrlDto,
@@ -62,36 +64,31 @@ export class UploadService {
       throw new BadRequestException(UPLOAD_ERRORS.UPLOAD_FILE_TOO_LARGE);
     }
 
-    // Create unique file key
-    const fileExtension = this.getFileExtension(fileName);
-    const key = `uploads/${userId}/${uuidv4()}${fileExtension}`;
+    try {
+      const timestamp = Math.round(new Date().getTime() / 1000);
+      const folder = `uploads/${userId}`;
 
-    // Create presigned URL
-    const command = new PutObjectCommand({
-      Bucket: this.bucketName,
-      Key: key,
-      ContentType: fileType,
-    });
+      // Generate signature
+      const signature = cloudinary.utils.api_sign_request(
+        {
+          timestamp: timestamp,
+          folder: folder,
+        },
+        this.apiSecret,
+      );
 
-    const expiresIn = 3600; // 1 hour
-    const uploadUrl = await getSignedUrl(this.s3Client, command, { expiresIn });
+      // Cloudinary upload API URL
+      const uploadUrl = `https://api.cloudinary.com/v1_1/${this.cloudName}/auto/upload`;
 
-    // Public file URL
-    const fileUrl = `https://${this.bucketName}.s3.${this.region}.amazonaws.com/${key}`;
-
-    return new PresignedUrlResponseDto({
-      uploadUrl,
-      fileUrl,
-      key,
-      expiresIn,
-    });
-  }
-
-  /**
-   * Get file extension from file name
-   */
-  private getFileExtension(fileName: string): string {
-    const parts = fileName.split('.');
-    return parts.length > 1 ? `.${parts.pop()}` : '';
+      return new PresignedUrlResponseDto({
+        uploadUrl,
+        signature,
+        timestamp,
+        apiKey: this.apiKey,
+        folder,
+      });
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to generate upload signature');
+    }
   }
 }
