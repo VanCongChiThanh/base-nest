@@ -1,26 +1,31 @@
 /**
- * DTO for presigned URL response
+ * DTO for Cloudinary upload signature response
  */
 export class PresignedUrlResponseDto {
   /**
-   * URL for uploading the file to S3
+   * Cloudinary endpoint for POST request
    */
   uploadUrl: string;
 
   /**
-   * Public URL for accessing the file after upload
+   * Cloudinary generated signature
    */
-  fileUrl: string;
+  signature: string;
 
   /**
-   * Key of the file in S3
+   * Timestamp used to generate signature
    */
-  key: string;
+  timestamp: number;
 
   /**
-   * expiration time in seconds
+   * Cloudinary API Key
    */
-  expiresIn: number;
+  apiKey: string;
+
+  /**
+   * Cloudinary Folder
+   */
+  folder: string;
 
   constructor(partial: Partial<PresignedUrlResponseDto>) {
     Object.assign(this, partial);
