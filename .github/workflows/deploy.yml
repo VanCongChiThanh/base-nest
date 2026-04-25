@@ -1,85 +1,45 @@
-name: Deploy to Google Cloud Run
+name: Deploy to DigitalOcean VPS
 
 on:
   push:
     branches: [main]
-  workflow_dispatch: # Allow manual trigger
-
-env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  REGION: asia-southeast1
-  SERVICE_NAME: gigwork-backend
-  ARTIFACT_REGISTRY: ${{ secrets.GCP_PROJECT_ID }}-docker
-  IMAGE_NAME: gigwork-backend
+  workflow_dispatch: # Cho phép bấm chạy thủ công trên GitHub
 
 jobs:
   deploy:
-    name: Build & Deploy
+    name: Build & Deploy to VPS
     runs-on: ubuntu-latest
     
-    permissions:
-      contents: read
-      id-token: write # Required for Workload Identity Federation
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ──── Authenticate to Google Cloud ────
-      - name: Authenticate to Google Cloud
-        id: auth
-        uses: google-github-actions/auth@v2
+      # ──── Copy toàn bộ code lên Server ────
+      - name: Copy files to VPS
+        uses: appleboy/scp-action@master
         with:
-          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          host: ${{ secrets.DO_HOST }}
+          username: root
+          key: ${{ secrets.DO_SSH_KEY }}
+          source: "."
+          target: "/app/gigwork"
 
-      # ──── Set up Cloud SDK ────
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+      # ──── Lệnh chạy trên Server ────
+      - name: Execute deployment commands
+        uses: appleboy/ssh-action@master
         with:
-          project_id: ${{ env.PROJECT_ID }}
-
-      # ──── Configure Docker for Artifact Registry ────
-      - name: Configure Docker
-        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
-
-      # ──── Build Docker Image ────
-      - name: Build Docker Image
-        run: |
-          docker build \
-            -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            .
-
-      # ──── Push Docker Image ────
-      - name: Push Docker Image
-        run: |
-          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-
-      # ──── Deploy to Cloud Run ────
-      - name: Deploy to Cloud Run
-        id: deploy
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE_NAME }}
-          region: ${{ env.REGION }}
-          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          flags: |
-            --allow-unauthenticated
-            --port=8080
-            --memory=512Mi
-            --cpu=1
-            --min-instances=0
-            --max-instances=3
-            --set-env-vars=NODE_ENV=production
-
-      # ──── Show URL ────
-      - name: Show Service URL
-        run: echo "Service URL → ${{ steps.deploy.outputs.url }}"
-
-      # ──── Health Check ────
-      - name: Health Check
-        run: |
-          sleep 10
-          curl -sf "${{ steps.deploy.outputs.url }}/api" || echo "Health check completed"
+          host: ${{ secrets.DO_HOST }}
+          username: root
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            cd /app/gigwork
+            
+            # Tạo file .env từ GitHub Secrets
+            echo "${{ secrets.ENV_FILE }}" > .env
+            
+            # Tắt container cũ, build và chạy container mới
+            docker compose down
+            docker compose up -d --build
+            
+            # Dọn dẹp rác (images cũ) để tránh đầy ổ cứng
+            docker image prune -f
