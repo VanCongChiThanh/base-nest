@@ -29,6 +29,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
     depends_on:
       - api
+      - dozzle
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -52,7 +53,8 @@ services:
     image: redis:7-alpine
     container_name: nestjs_redis
     ports:
-      - '6379:6379'
+      # Bind to loopback only so Redis is not publicly reachable.
+      - '127.0.0.1:6379:6379'
     volumes:
       - redis_data:/data
     restart: unless-stopped
@@ -61,6 +63,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle_logs
+    restart: unless-stopped
+    expose:
+      - "8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Keep log UI lightweight on small droplets.
+      DOZZLE_LEVEL: info
+      DOZZLE_TAILSIZE: 300
+      DOZZLE_NO_ANALYTICS: "true"
 
 volumes:
   postgres_data:
