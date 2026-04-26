@@ -35,13 +35,14 @@ jobs:
           script: |
             cd /app/gigwork
             
-            # Tạo file .env từ GitHub Secrets
+            # 1. create .env file
             echo "${{ secrets.ENV_FILE }}" > .env
             
-            # Tắt container cũ, build lại hoàn toàn (không dùng cache) và chạy
-            docker compose down
-            docker compose build --no-cache
+            # 2. Build image
+            docker compose build --no-cache api
+            
+            # 3. swap image
             docker compose up -d
             
-            # Dọn dẹp rác (images cũ) để tránh đầy ổ cứng
+            # 4. remove old image
             docker image prune -f
