@@ -24,12 +24,11 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - caddy_data:/data       # Lưu trữ chứng chỉ SSL để không bị xin lại khi restart
+      - caddy_data:/data
       - caddy_config:/config
+      - ./Caddyfile:/etc/caddy/Caddyfile
     depends_on:
       - api
-    # Lệnh thần thánh: Tự động xin HTTPS và trỏ về NestJS
-    command: caddy reverse-proxy --from https://api-coursevo-dev.id.vn --to http://api:3000
 
   postgres:
     image: pgvector/pgvector:pg16

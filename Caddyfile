@@ -1,0 +1,4 @@
+api-coursevo-dev.id.vn {
+	# Chỉ proxy thuần túy — KHÔNG thêm CORS headers (để NestJS tự xử lý)
+	reverse_proxy api:3000
+}
