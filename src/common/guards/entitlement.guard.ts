@@ -1,7 +1,6 @@
 import {
   CanActivate,
   ExecutionContext,
-  ForbiddenException,
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -13,6 +12,8 @@ import {
 } from '../decorators';
 import { SubscriptionService } from '../../modules/subscription/subscription.service';
 import { User } from '../../modules/user/entities';
+import { ForbiddenException } from '../exceptions/business.exception';
+import { SUBSCRIPTION_ERRORS } from '../constants/error-codes.constant';
 
 @Injectable()
 export class EntitlementGuard implements CanActivate {
@@ -53,20 +54,17 @@ export class EntitlementGuard implements CanActivate {
 
         if (requirement.equals !== undefined) {
           if (value !== requirement.equals) {
-            throw new ForbiddenException(
-              `Feature ${requirement.key} is not available for your plan`,
-            );
+            throw new ForbiddenException(SUBSCRIPTION_ERRORS.FEATURE_NOT_AVAILABLE);
           }
           continue;
         }
 
         if (!value) {
-          throw new ForbiddenException(
-            `Feature ${requirement.key} is not enabled for your plan`,
-          );
+          throw new ForbiddenException(SUBSCRIPTION_ERRORS.FEATURE_NOT_ENABLED);
         }
       }
     }
+
 
     for (const quota of consumeQuotas) {
       await this.subscriptionService.consumeQuota(user, quota);
