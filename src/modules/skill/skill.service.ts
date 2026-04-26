@@ -44,6 +44,7 @@ export class SkillService {
       const existing = await this.skillRepository.findOne({
         where: { name: dto.name },
       });
+      // check if skill already exists
       if (existing) {
         throw new ConflictException(SKILL_ERRORS.SKILL_ALREADY_EXISTS);
       }
