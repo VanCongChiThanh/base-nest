@@ -30,8 +30,9 @@ async function bootstrap() {
   app.useGlobalInterceptors(new ResponseTransformInterceptor());
 
   // CORS
+  const frontendUrl = configService.get<string>('FRONTEND_URL');
   app.enableCors({
-    origin: configService.get<string>('FRONTEND_URL') || '*',
+    origin: frontendUrl ? frontendUrl.split(',').map((url) => url.trim()) : true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   });
