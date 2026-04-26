@@ -2,3 +2,12 @@ api-coursevo-dev.id.vn {
 	# Chỉ proxy thuần túy — KHÔNG thêm CORS headers (để NestJS tự xử lý)
 	reverse_proxy api:3000
 }
+
+logs.api-coursevo-dev.id.vn {
+	# Dozzle logs auth
+	basic_auth {
+		admin $2b$10$/nxdU3PzEqOyvc7OY/4Dj.hEtcq0vafOkjPy7LzYaj0FurFJWBUK2
+	}
+
+	reverse_proxy dozzle:8080
+}

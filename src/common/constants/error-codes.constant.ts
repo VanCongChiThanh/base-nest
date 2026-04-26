@@ -470,6 +470,49 @@ export const DISPUTE_ERRORS = {
   },
 } as const;
 
+// ==================== SUBSCRIPTION & ENTITLEMENTS ====================
+export const SUBSCRIPTION_ERRORS = {
+  FEATURE_NOT_AVAILABLE: {
+    code: 'SUBSCRIPTION_FEATURE_NOT_AVAILABLE',
+    message: 'Feature not available for your current plan',
+  },
+  FEATURE_NOT_ENABLED: {
+    code: 'SUBSCRIPTION_FEATURE_NOT_ENABLED',
+    message: 'Feature is not enabled for your current plan',
+  },
+  QUOTA_EXCEEDED: {
+    code: 'SUBSCRIPTION_QUOTA_EXCEEDED',
+    message: 'You have exceeded your plan quota',
+  },
+  SUBSCRIPTION_REQUIRED: {
+    code: 'SUBSCRIPTION_REQUIRED',
+    message: 'An active subscription is required to access this feature',
+  },
+  EKYC_REQUIRED: {
+    code: 'SUBSCRIPTION_EKYC_REQUIRED',
+    message: 'Bạn cần hoàn tất eKYC trước khi thực hiện hành động này',
+  },
+  PLAN_NOT_AVAILABLE: {
+    code: 'SUBSCRIPTION_PLAN_NOT_AVAILABLE',
+    message: 'Gói cước này không khả dụng cho tài khoản của bạn',
+  },
+  PLAN_NOT_FOUND: {
+    code: 'SUBSCRIPTION_PLAN_NOT_FOUND',
+    message: 'Gói cước không tồn tại',
+  },
+  PAYMENT_FAILED: {
+    code: 'SUBSCRIPTION_PAYMENT_FAILED',
+    message: 'Không thể khởi tạo thanh toán',
+  },
+  PAYMENT_SYNC_FAILED: {
+    code: 'SUBSCRIPTION_PAYMENT_SYNC_FAILED',
+    message: 'Không thể đồng bộ thông tin thanh toán',
+  },
+} as const;
+
+
+
+
 // ==================== ALL ERROR CODES ====================
 export const ERROR_CODES = {
   ...AUTH_ERRORS,
@@ -491,6 +534,7 @@ export const ERROR_CODES = {
   ...LOCATION_ERRORS,
   ...PAYMENT_ERRORS,
   ...DISPUTE_ERRORS,
+  ...SUBSCRIPTION_ERRORS,
 } as const;
 
 // Type for error code keys

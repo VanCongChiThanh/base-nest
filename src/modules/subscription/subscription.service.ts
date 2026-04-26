@@ -1,10 +1,7 @@
 import {
-  BadRequestException,
-  ForbiddenException,
   Inject,
   Injectable,
   Logger,
-  NotFoundException,
 } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -29,6 +26,15 @@ import {
   UsageCounter,
   UserSubscription,
 } from './entities';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '../../common/exceptions/business.exception';
+import {
+  SUBSCRIPTION_ERRORS,
+  USER_ERRORS,
+} from '../../common/constants/error-codes.constant';
 
 type EntitlementValue = boolean | number | string | null;
 
@@ -169,9 +175,10 @@ export class SubscriptionService {
   private getPayOSClient(): PayOS {
     if (!this.payosClient) {
       if (!this.payosConf.clientId || !this.payosConf.apiKey || !this.payosConf.checksumKey) {
-        throw new BadRequestException(
-          'PayOS credentials are not configured. Set PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY.',
-        );
+        throw new BadRequestException({
+          code: 'PAYMENT_CONFIG_ERROR',
+          message: 'PayOS credentials are not configured. Set PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY.',
+        });
       }
       this.payosClient = new PayOS({
         clientId: this.payosConf.clientId,
@@ -273,9 +280,7 @@ export class SubscriptionService {
         user.verificationLevel === VerificationLevel.BUSINESS;
 
       if (!isEkycVerified) {
-        throw new ForbiddenException(
-          'Bạn cần hoàn tất eKYC trước khi đăng bài tuyển dụng.',
-        );
+        throw new ForbiddenException(SUBSCRIPTION_ERRORS.EKYC_REQUIRED);
       }
     }
 
@@ -290,9 +295,7 @@ export class SubscriptionService {
     const limit = Number(featureValue ?? 0);
 
     if (!Number.isFinite(limit) || limit <= 0) {
-      throw new ForbiddenException(
-        'Your current plan does not include this quota',
-      );
+      throw new ForbiddenException(SUBSCRIPTION_ERRORS.FEATURE_NOT_AVAILABLE);
     }
 
     const periodType = quota.period || 'monthly';
@@ -318,14 +321,13 @@ export class SubscriptionService {
 
     const nextCount = counter.count + amount;
     if (nextCount > limit) {
-      throw new ForbiddenException(
-        `Quota exceeded for ${quota.counterKey}. Limit: ${limit}/${periodType}`,
-      );
+      throw new ForbiddenException(SUBSCRIPTION_ERRORS.QUOTA_EXCEEDED);
     }
 
     counter.count = nextCount;
     await this.usageCounterRepository.save(counter);
   }
+
 
   async assignPlan(adminId: string, targetUserId: string, dto: AssignPlanDto) {
     await this.ensureSeededPlans();
@@ -335,7 +337,7 @@ export class SubscriptionService {
     });
 
     if (!plan) {
-      throw new NotFoundException('Plan not found');
+      throw new NotFoundException(SUBSCRIPTION_ERRORS.PLAN_NOT_FOUND);
     }
 
     const newSubscription = await this.activatePlanForUser(targetUserId, plan);
@@ -369,7 +371,7 @@ export class SubscriptionService {
 
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException(USER_ERRORS.USER_NOT_FOUND);
     }
 
     const plan = await this.planRepository.findOne({
@@ -377,13 +379,14 @@ export class SubscriptionService {
     });
 
     if (!plan) {
-      throw new NotFoundException('Plan not found');
+      throw new NotFoundException(SUBSCRIPTION_ERRORS.PLAN_NOT_FOUND);
     }
 
     const expectedScope = this.getScopeByRole(user.role);
     if (plan.scope !== expectedScope) {
-      throw new ForbiddenException('Plan is not available for your account role');
+      throw new ForbiddenException(SUBSCRIPTION_ERRORS.PLAN_NOT_AVAILABLE);
     }
+
 
     if (
       user.role === Role.ORGANIZATION &&
@@ -401,7 +404,7 @@ export class SubscriptionService {
     }
 
     if (Number(plan.price) <= 0) {
-      throw new BadRequestException('Cannot checkout a free plan. Assign it directly.');
+      throw new BadRequestException(SUBSCRIPTION_ERRORS.PAYMENT_FAILED);
     }
 
     const orderCode = Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 1000));
@@ -440,7 +443,7 @@ export class SubscriptionService {
       this.logger.error('Failed to create PayOS payment link', error);
       paymentOrder.status = PaymentOrderStatus.CANCELLED;
       await this.paymentOrderRepository.save(paymentOrder);
-      throw new BadRequestException('Failed to initialize payment');
+      throw new BadRequestException(SUBSCRIPTION_ERRORS.PAYMENT_FAILED);
     }
   }
 
@@ -478,7 +481,10 @@ export class SubscriptionService {
       return { success: true };
     } catch (error) {
       this.logger.error('Webhook verification failed', error);
-      throw new BadRequestException('Invalid webhook signature');
+      throw new BadRequestException({
+        code: 'SUBSCRIPTION_WEBHOOK_INVALID',
+        message: 'Invalid webhook signature',
+      });
     }
   }
 
@@ -488,7 +494,7 @@ export class SubscriptionService {
     });
 
     if (!paymentOrder) {
-      throw new NotFoundException('Payment order not found');
+      throw new NotFoundException();
     }
 
     if (paymentOrder.status === PaymentOrderStatus.PAID) {
@@ -511,7 +517,7 @@ export class SubscriptionService {
       return { status: paymentLink.status };
     } catch (error) {
       this.logger.error(`Failed to sync PayOS order ${orderCode}`, error);
-      throw new BadRequestException('Failed to retrieve payment information');
+      throw new BadRequestException(SUBSCRIPTION_ERRORS.PAYMENT_SYNC_FAILED);
     }
   }
 
