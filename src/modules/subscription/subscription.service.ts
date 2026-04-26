@@ -32,6 +32,7 @@ import {
   NotFoundException,
 } from '../../common/exceptions/business.exception';
 import {
+  RESOURCE_ERRORS,
   SUBSCRIPTION_ERRORS,
   USER_ERRORS,
 } from '../../common/constants/error-codes.constant';
@@ -494,7 +495,7 @@ export class SubscriptionService {
     });
 
     if (!paymentOrder) {
-      throw new NotFoundException();
+      throw new NotFoundException(RESOURCE_ERRORS.RESOURCE_NOT_FOUND);
     }
 
     if (paymentOrder.status === PaymentOrderStatus.PAID) {
