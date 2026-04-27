@@ -37,12 +37,24 @@ jobs:
             
             # 1. create .env file
             echo "${{ secrets.ENV_FILE }}" > .env
+
+            # 2. validate required DB env vars before touching containers
+            if ! grep -q '^DB_HOST=' .env || ! grep -q '^DB_PORT=' .env || ! grep -q '^DB_USERNAME=' .env || ! grep -q '^DB_PASSWORD=' .env || ! grep -q '^DB_DATABASE=' .env; then
+              echo "Missing one of DB_HOST/DB_PORT/DB_USERNAME/DB_PASSWORD/DB_DATABASE in ENV_FILE"
+              exit 1
+            fi
             
-            # 2. Build image
+            # 3. Build image
             docker compose build --no-cache api
             
-            # 3. swap image
-            docker compose up -d
+            # 4. start dependencies first
+            docker compose up -d postgres redis
+
+            # 5. keep Postgres password in DB role synced with .env (works even with existing volume)
+            docker compose exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v pg_user="$POSTGRES_USER" -v pg_pass="$POSTGRES_PASSWORD" -c "SELECT format('\''ALTER USER %I WITH PASSWORD %L'\'', :'\''pg_user'\'', :'\''pg_pass'\'') \\gexec"'
+
+            # 6. start app/proxy after DB credentials are aligned
+            docker compose up -d api caddy dozzle
             
-            # 4. remove old image
+            # 7. remove old image
             docker image prune -f
