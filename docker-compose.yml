@@ -10,6 +10,10 @@ services:
       - '3000'
     env_file:
       - .env
+    environment:
+      # Override DB_HOST sang tên container nội bộ của Docker network
+      # (trong .env local để là localhost, trên server tự động dùng "postgres")
+      DB_HOST: postgres
     depends_on:
       postgres:
         condition: service_healthy
@@ -34,17 +38,20 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: nestjs_postgres
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: ${DB_USERNAME:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${DB_DATABASE:-nestjs_base}
+      # Map đúng tên biến Postgres từ DB_* trong .env
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_DATABASE}
     ports:
       - '5433:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_DATABASE:-nestjs_base}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
       interval: 10s
       timeout: 5s
       retries: 5
