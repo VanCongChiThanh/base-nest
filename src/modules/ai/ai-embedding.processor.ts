@@ -18,6 +18,7 @@ import {
   SyncGraphJobPayload,
   SyncGraphWorkerPayload,
   RemoveGraphNodePayload,
+  BatchSyncSelectivePayload,
 } from './ai-embedding.constants';
 
 @Processor(AI_EMBEDDING_QUEUE)
@@ -171,6 +172,76 @@ export class AiEmbeddingProcessor {
       this.logger.error(`[GraphRAG] Error syncing graph worker ${workerServiceId}`, err?.stack);
       throw err;
     }
+  }
+
+  // ─── Selective Batch Sync ─────────────────────────────────────
+
+  @Process(EmbeddingJobName.BATCH_SYNC_SELECTIVE)
+  async handleBatchSyncSelective(bullJob: Bull.Job<BatchSyncSelectivePayload>) {
+    const { targets } = bullJob.data;
+    this.logger.log(`[Queue] Selective sync started — targets: [${targets.join(', ')}]`);
+
+    const result: Record<string, number> = {};
+
+    if (targets.includes('jobs')) {
+      let count = 0;
+      try {
+        const jobs = await this.jobRepository.find({
+          where: { status: JobStatus.OPEN },
+          select: ['id'],
+        });
+        for (const job of jobs) {
+          try {
+            const synced = await this.graphRagService.syncJobNode(job.id);
+            if (synced) count++;
+            await this.delay(300);
+          } catch (err: any) {
+            this.logger.warn(`[Selective] Skip job ${job.id}: ${err?.message}`);
+          }
+        }
+      } catch (err: any) {
+        this.logger.error('[Selective] Jobs sync failed', err?.stack);
+      }
+      result.jobs = count;
+      this.logger.log(`[Selective] ✅ Jobs: ${count} synced`);
+    }
+
+    if (targets.includes('workers')) {
+      let count = 0;
+      try {
+        const services = await this.workerServiceRepo.find({
+          where: { isActive: true },
+          select: ['id'],
+        });
+        for (const svc of services) {
+          try {
+            const synced = await this.graphRagService.syncWorkerServiceNode(svc.id);
+            if (synced) count++;
+            await this.delay(300);
+          } catch (err: any) {
+            this.logger.warn(`[Selective] Skip worker-service ${svc.id}: ${err?.message}`);
+          }
+        }
+      } catch (err: any) {
+        this.logger.error('[Selective] Workers sync failed', err?.stack);
+      }
+      result.workers = count;
+      this.logger.log(`[Selective] ✅ Workers: ${count} synced`);
+    }
+
+    if (targets.includes('faq')) {
+      try {
+        const count = await this.graphRagService.syncFaqNodes();
+        result.faq = count;
+        this.logger.log(`[Selective] ✅ FAQ backfill: ${count} embedded`);
+      } catch (err: any) {
+        this.logger.error('[Selective] FAQ sync failed', err?.stack);
+        result.faq = 0;
+      }
+    }
+
+    this.logger.log(`[Queue] ✅ Selective sync done: ${JSON.stringify(result)}`);
+    return result;
   }
 
   @Process(EmbeddingJobName.REMOVE_GRAPH_NODE)

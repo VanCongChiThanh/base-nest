@@ -5,6 +5,8 @@ import Bull from 'bull';
 import {
   AI_EMBEDDING_QUEUE,
   EmbeddingJobName,
+  SyncTarget,
+  ALL_SYNC_TARGETS,
 } from './ai-embedding.constants';
 
 /**
@@ -22,11 +24,13 @@ export class AiSyncCronService {
   ) {}
 
   // ─── Cron: dispatch batch sync every hour ──────────────────────
+  // FAQ/guide/policy là data tĩnh, không cần sync theo giờ.
+  // Chỉ sync jobs + workers để bắt dữ liệu mới/thay đổi.
 
   @Cron(CronExpression.EVERY_HOUR)
   async handleCronSync() {
-    this.logger.log('Cron tick → dispatching batch-sync-all to queue');
-    await this.enqueueBatchSync();
+    this.logger.log('Cron tick → dispatching selective sync [jobs, workers]');
+    await this.enqueueBatchSyncSelective(['jobs', 'workers']);
   }
 
   // ─── Public helpers – called from other services ───────────────
@@ -130,6 +134,44 @@ export class AiSyncCronService {
     );
     this.logger.log('Enqueued BATCH_SYNC_ALL');
     return { message: 'Đã đưa yêu cầu đồng bộ toàn bộ vào hàng đợi.' };
+  }
+
+  /**
+   * Selective sync — only processes the requested targets.
+   * targets: array of 'jobs' | 'workers' | 'faq'
+   * Omitting targets defaults to ALL_SYNC_TARGETS (same as full sync).
+   */
+  async enqueueBatchSyncSelective(targets: SyncTarget[] = ALL_SYNC_TARGETS) {
+    const unique = [...new Set(targets)].filter((t) =>
+      ALL_SYNC_TARGETS.includes(t),
+    );
+    if (unique.length === 0) {
+      throw new BadRequestException(
+        `targets không hợp lệ. Giá trị cho phép: ${ALL_SYNC_TARGETS.join(', ')}`,
+      );
+    }
+
+    const jobs = await this.embeddingQueue.getJobs(['waiting', 'delayed']);
+    const isRunning = jobs.some(
+      (j) =>
+        j.name === EmbeddingJobName.BATCH_SYNC_ALL ||
+        j.name === EmbeddingJobName.BATCH_SYNC_SELECTIVE,
+    );
+    if (isRunning) {
+      throw new BadRequestException('Tiến trình đồng bộ đang chạy. Vui lòng đợi trong giây lát...');
+    }
+
+    await this.embeddingQueue.add(
+      EmbeddingJobName.BATCH_SYNC_SELECTIVE,
+      { targets: unique },
+      { attempts: 1, removeOnComplete: true, removeOnFail: false },
+    );
+
+    this.logger.log(`Enqueued BATCH_SYNC_SELECTIVE — targets: [${unique.join(', ')}]`);
+    return {
+      message: `Đã đưa yêu cầu đồng bộ vào hàng đợi.`,
+      targets: unique,
+    };
   }
 
   // ─── Legacy wrappers for existing controller endpoints ─────────

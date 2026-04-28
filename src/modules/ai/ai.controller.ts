@@ -16,7 +16,9 @@ import type { Response } from 'express';
 import { AiChatbotService } from './ai-chatbot.service';
 import { AiSyncCronService } from './ai-sync-cron.service';
 import { ScamDetectorService, ScamAnalysisResult } from './scam-detector.service';
-import { AiChatDto, AnalyzeJobDto, AnalyzeJobContentDto } from './dto';
+import { AiChatDto, AnalyzeJobDto, AnalyzeJobContentDto, BatchSyncDto, UpsertFaqDto } from './dto';
+import { ALL_SYNC_TARGETS } from './ai-embedding.constants';
+import { GraphRagService } from './graph-rag.service';
 import { JwtAuthGuard } from '../../common/guards';
 import {
   CurrentUser,
@@ -38,6 +40,7 @@ export class AiController {
     private readonly chatbotService: AiChatbotService,
     private readonly scamDetectorService: ScamDetectorService,
     private readonly aiSyncCronService: AiSyncCronService,
+    private readonly graphRagService: GraphRagService,
     @InjectRepository(SavedJob)
     private readonly savedJobRepo: Repository<SavedJob>,
     @InjectRepository(Job)
@@ -115,6 +118,25 @@ export class AiController {
 
   // ==================== MANUAL SYNC ====================
 
+  /**
+   * POST /ai/sync
+   * Admin-only selective sync.
+   * Body: { targets?: ('jobs' | 'workers' | 'faq')[] }
+   * Omit targets → sync all.
+   *
+   * Examples:
+   *   {}                          → sync jobs + workers + faq
+   *   { "targets": ["faq"] }      → only backfill FAQ embeddings
+   *   { "targets": ["jobs","faq"] }
+   */
+  @Post('sync')
+  @Roles(Role.ADMIN)
+  @HttpCode(200)
+  async triggerSync(@Body() dto: BatchSyncDto) {
+    const targets = dto.targets?.length ? dto.targets : ALL_SYNC_TARGETS;
+    return this.aiSyncCronService.enqueueBatchSyncSelective(targets);
+  }
+
   @Public()
   @Post('dev-sync')
   async triggerDevSync() {
@@ -133,6 +155,27 @@ export class AiController {
   @Get('queue-status')
   async getQueueStatus() {
     return this.aiSyncCronService.getQueueStatus();
+  }
+
+  // ==================== FAQ / KNOWLEDGE BASE (admin) ====================
+
+  @Get('faq')
+  @Roles(Role.ADMIN)
+  async listFaq() {
+    return this.graphRagService.listFaqNodes();
+  }
+
+  @Post('faq')
+  @Roles(Role.ADMIN)
+  async upsertFaq(@Body() dto: UpsertFaqDto) {
+    return this.graphRagService.upsertFaqNode(dto);
+  }
+
+  @Delete('faq/:id')
+  @Roles(Role.ADMIN)
+  async deleteFaq(@Param('id', ParseUUIDPipe) id: string) {
+    await this.graphRagService.deleteFaqNode(id);
+    return { success: true };
   }
 
   // ==================== SCAM DETECTION ====================
