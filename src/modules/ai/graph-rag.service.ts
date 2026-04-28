@@ -151,7 +151,11 @@ export class GraphRagService {
     const sourceId = `job_${jobId}`;
 
     const existing = await this.graphRepo.findOne({ where: { sourceId } });
-    if (existing?.contentHash === contentHash) return false; // No change
+    // Keep syncing when embedding is missing so failed/partial old runs can self-heal.
+    // Without this, rows with NULL embedding are permanently skipped if content is unchanged.
+    const needsEmbeddingBackfill =
+      !!existing && (!Array.isArray(existing.embedding) || existing.embedding.length === 0);
+    if (existing?.contentHash === contentHash && !needsEmbeddingBackfill) return false; // No change
 
     const edges = this.buildJobEdges(row);
 
@@ -230,7 +234,9 @@ export class GraphRagService {
     const sourceId = `worker_service_${workerServiceId}`;
 
     const existing = await this.graphRepo.findOne({ where: { sourceId } });
-    if (existing?.contentHash === contentHash) return false;
+    const needsEmbeddingBackfill =
+      !!existing && (!Array.isArray(existing.embedding) || existing.embedding.length === 0);
+    if (existing?.contentHash === contentHash && !needsEmbeddingBackfill) return false;
 
     const edges = this.buildWorkerEdges(row, skillNames);
 
