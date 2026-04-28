@@ -2,18 +2,32 @@ import { Injectable, Logger, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import type { ConfigType } from '@nestjs/config';
+import * as crypto from 'crypto';
+import Redis from 'ioredis';
 import { GeminiService } from './gemini.service';
 import { GraphRagService, MetadataFilter } from './graph-rag.service';
 import { ChatSession, ChatMessage } from './entities';
+import { REDIS_CLIENT } from '../redis';
 import geminiConfig from '../../config/gemini.config';
 
 // ─── Query Analysis ──────────────────────────────────────────────────────────
 
+type QueryIntent = 'find_job' | 'find_candidate' | 'platform_qa' | 'general';
+
 interface QueryAnalysis {
-  intent: 'find_job' | 'find_candidate' | 'platform_qa' | 'general';
+  intent: QueryIntent;
   category_filter: 'job_posting' | 'worker_profile' | null;
   rewritten_query: string;
 }
+
+const INTENT_CACHE_PREFIX = 'chatbot:intent:';
+const INTENT_CACHE_TTL = 60 * 60 * 24; // 24h
+const INTENT_LLM_TIMEOUT_MS = 1500;
+
+// Score gap threshold to declare a node-type "dominant" in vector search.
+// If top score for a type beats the other type by this margin → exclusive.
+// Tuned empirically: < 0.05 too noisy, > 0.15 too strict.
+const DOMINANT_TYPE_SCORE_GAP = 0.08;
 
 const QUERY_ANALYSIS_SYSTEM = `Bạn là bộ phân tích truy vấn cho hệ thống RAG của GigWork (nền tảng việc làm thời vụ).
 
@@ -158,6 +172,8 @@ export class AiChatbotService {
     @Inject(geminiConfig.KEY)
     private readonly config: ConfigType<typeof geminiConfig>,
     private readonly dataSource: DataSource,
+    @Inject(REDIS_CLIENT)
+    private readonly redis: Redis,
   ) {}
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -202,18 +218,25 @@ export class AiChatbotService {
       session = await this.chatSessionRepo.save(session);
     }
 
-    // 2. ONLY embedText (Bypass analyzeQuery to save ~800ms)
-    const embedding = await this.geminiService.embedText(message);
+    // 2. Embed + analyze intent in PARALLEL
+    //    - embedText: needed for vector search
+    //    - resolveIntent: cached LLM call, with timeout fallback
+    //    Total wall time = max(embed, intent) ≈ embed time only (intent often cached / faster)
+    const [embedding, analysis] = await Promise.all([
+      this.geminiService.embedText(message),
+      this.resolveIntent(message),
+    ]);
 
-    // 3. Query routing: Unified Graph RAG search (no intent filter)
+    // 3. Query routing: intent-aware Graph RAG search with score-based safety net
     const { context, sources, references } = await this.routeRetrievalUnified(
       embedding,
-      message,
+      analysis.rewritten_query || message,
+      analysis.intent,
     );
 
     // 4. Build prompt
     const chatHistory = session.messages.slice(-this.config.chatHistoryLimit);
-    const prompt = this.buildPrompt(message, context, chatHistory, 'general');
+    const prompt = this.buildPrompt(message, context, chatHistory, analysis.intent);
 
     // 5. Generate response
     const response = await this.geminiService.generateContent(prompt, GENERATION_SYSTEM);
@@ -257,13 +280,17 @@ export class AiChatbotService {
       session = await this.chatSessionRepo.save(session);
     }
 
-    // 2. ONLY embedText (Bypass analyzeQuery to save ~800ms)
-    const embedding = await this.geminiService.embedText(message);
+    // 2. Embed + analyze intent in PARALLEL (cached + timeout-protected)
+    const [embedding, analysis] = await Promise.all([
+      this.geminiService.embedText(message),
+      this.resolveIntent(message),
+    ]);
 
-    // 3. Query routing: Unified Graph RAG search (no intent filter)
+    // 3. Query routing: intent-aware Graph RAG search with score-based safety net
     const { context, sources, references } = await this.routeRetrievalUnified(
       embedding,
-      message,
+      analysis.rewritten_query || message,
+      analysis.intent,
     );
 
     // Yield metadata first so UI can show references immediately
@@ -277,7 +304,7 @@ export class AiChatbotService {
 
     // 4. Build prompt
     const chatHistory = session.messages.slice(-this.config.chatHistoryLimit);
-    const prompt = this.buildPrompt(message, context, chatHistory, 'general');
+    const prompt = this.buildPrompt(message, context, chatHistory, analysis.intent);
 
     // 5. Generate stream
     const stream = await this.geminiService.generateContentStream(prompt, GENERATION_SYSTEM);
@@ -363,66 +390,212 @@ export class AiChatbotService {
   }
 
   /**
-   * Unified Query Router:
-   * Searches graph_knowledge without node_type filtering.
-   * Cosine similarity naturally surfaces FAQs for questions, and Jobs/Workers for search intents.
+   * Hybrid Query Router (LLM intent + score-based dominance):
+   *
+   * 1. find_job / find_candidate → trust LLM, hard filter by nodeType.
+   * 2. platform_qa               → FAQ/guide/policy lookup + platform links.
+   * 3. general                   → search all types, then resolve dominant
+   *                                  type by vector score gap.
+   *
+   * Why: pure keyword matching breaks on natural language ("có ai rảnh chụp ảnh"),
+   * but pure LLM is slow and costs $. Combining both — LLM for clear cases,
+   * score gap for ambiguous ones — keeps both speed and accuracy as the
+   * vocabulary/system grows.
    */
   private async routeRetrievalUnified(
     embedding: number[],
     rawQuery: string,
+    intent: QueryIntent,
   ): Promise<RetrieveResult> {
     if (!embedding || embedding.length === 0) {
       return { context: '', sources: [], references: [] };
     }
 
+    if (intent === 'find_job' || intent === 'find_candidate') {
+      return this.runGraphRetrieval(rawQuery, embedding, {
+        nodeType: intent === 'find_job' ? 'job' : 'worker_service',
+        isAvailable: true,
+      });
+    }
+
+    if (intent === 'platform_qa') {
+      return this.retrieveContextLegacy(embedding, {
+        intent: 'platform_qa',
+        category_filter: null,
+        rewritten_query: rawQuery,
+      });
+    }
+
+    // 'general' → search all available, then resolve by score dominance
     try {
-      // Filter out unavailable jobs/workers, but keep FAQs (they have isAvailable = null or false, but we can't filter by true otherwise FAQs vanish)
-      // Actually, GraphRagService.retrieve vector query already enforces is_active = true.
-      // We will let GraphRAG retrieve the top 5 matches across ALL node types.
       const graphResult = await this.graphRagService.retrieve(
         rawQuery,
         embedding,
-        {}, // No filter
+        { isAvailable: true },
       );
 
-      if (graphResult.nodes.length > 0) {
-        const references = graphResult.nodes
-          .filter((n) => n.nodeType === 'job' || n.nodeType === 'worker_service')
-          .filter((n) => n.isAvailable) // Only show available ones as references
-          .map((n) => {
-            if (n.nodeType === 'job') {
-              const jobId = n.sourceId.replace('job_', '');
-              return {
-                type: 'job' as const,
-                title: n.title,
-                url: `/jobs/${jobId}`,
-                salary: n.priceDisplay ?? undefined,
-                location: n.address ?? undefined,
-                category: n.categoryName ?? undefined,
-              };
-            }
-            const workerId = n.ownerId ?? '';
-            return {
-              type: 'worker' as const,
-              title: n.title,
-              url: `/users/${workerId}`,
-              price: n.priceDisplay ?? undefined,
-              location: n.provinceCode ?? undefined,
-              isAvailable: n.isAvailable,
-            };
-          });
+      const candidateNodes = graphResult.nodes.filter(
+        (n) =>
+          (n.nodeType === 'job' || n.nodeType === 'worker_service') &&
+          n.isAvailable,
+      );
 
-        return {
-          context: graphResult.context,
-          sources: graphResult.sources,
-          references,
-        };
+      if (candidateNodes.length === 0) {
+        return { context: graphResult.context, sources: graphResult.sources, references: [] };
       }
+
+      const dominantType = this.resolveDominantType(candidateNodes);
+      const filteredNodes = dominantType
+        ? candidateNodes.filter((n) => n.nodeType === dominantType)
+        : candidateNodes;
+
+      return {
+        context: graphResult.context,
+        sources: graphResult.sources,
+        references: filteredNodes.map((n) => this.toReference(n)),
+      };
     } catch (err) {
       this.logger.warn('[GraphRAG] Unified retrieval failed', err);
     }
 
     return { context: '', sources: [], references: [] };
+  }
+
+  // ─── Helpers ───────────────────────────────────────────────────────────────
+
+  private async runGraphRetrieval(
+    rawQuery: string,
+    embedding: number[],
+    filter: MetadataFilter,
+  ): Promise<RetrieveResult> {
+    try {
+      const graphResult = await this.graphRagService.retrieve(rawQuery, embedding, filter);
+
+      const references = graphResult.nodes
+        .filter(
+          (n) =>
+            (n.nodeType === 'job' || n.nodeType === 'worker_service') &&
+            n.isAvailable,
+        )
+        .map((n) => this.toReference(n));
+
+      return {
+        context: graphResult.context,
+        sources: graphResult.sources,
+        references,
+      };
+    } catch (err) {
+      this.logger.warn('[GraphRAG] Filtered retrieval failed', err);
+      return { context: '', sources: [], references: [] };
+    }
+  }
+
+  /**
+   * Decide if one node type clearly dominates by vector score.
+   * Returns 'job' / 'worker_service' if the gap exceeds DOMINANT_TYPE_SCORE_GAP,
+   * otherwise null (= keep mixed).
+   *
+   * Uses per-type best score (not average) so a single highly-relevant node wins.
+   */
+  private resolveDominantType(
+    nodes: { nodeType: string; _vectorScore?: number }[],
+  ): 'job' | 'worker_service' | null {
+    let bestJob = -Infinity;
+    let bestWorker = -Infinity;
+
+    for (const n of nodes) {
+      const score = (n as { _vectorScore?: number })._vectorScore ?? 0;
+      if (n.nodeType === 'job' && score > bestJob) bestJob = score;
+      else if (n.nodeType === 'worker_service' && score > bestWorker) bestWorker = score;
+    }
+
+    if (bestJob === -Infinity) return 'worker_service';
+    if (bestWorker === -Infinity) return 'job';
+
+    const gap = Math.abs(bestJob - bestWorker);
+    if (gap < DOMINANT_TYPE_SCORE_GAP) return null; // genuinely mixed
+
+    return bestJob > bestWorker ? 'job' : 'worker_service';
+  }
+
+  private toReference(n: {
+    nodeType: string;
+    sourceId: string;
+    title: string;
+    priceDisplay?: string | null;
+    address?: string | null;
+    categoryName?: string | null;
+    ownerId?: string | null;
+    provinceCode?: string | null;
+    isAvailable?: boolean;
+  }): ChatReference {
+    if (n.nodeType === 'job') {
+      const jobId = n.sourceId.replace('job_', '');
+      return {
+        type: 'job',
+        title: n.title,
+        url: `/jobs/${jobId}`,
+        salary: n.priceDisplay ?? undefined,
+        location: n.address ?? undefined,
+        category: n.categoryName ?? undefined,
+      };
+    }
+    const workerId = n.ownerId ?? '';
+    return {
+      type: 'worker',
+      title: n.title,
+      url: `/users/${workerId}`,
+      price: n.priceDisplay ?? undefined,
+      location: n.provinceCode ?? undefined,
+      isAvailable: n.isAvailable,
+    };
+  }
+
+  /**
+   * Resolve query intent with multi-layer strategy:
+   * 1. Redis cache (24h, normalized key) → ~1ms
+   * 2. LLM analyzeQuery with 1.5s timeout → ~300-700ms
+   * 3. Fallback to 'general' on any failure → score-based dominance handles routing
+   */
+  private async resolveIntent(query: string): Promise<QueryAnalysis> {
+    const cacheKey = INTENT_CACHE_PREFIX + this.hashQuery(query);
+
+    try {
+      const cached = await this.redis.get(cacheKey);
+      if (cached) return JSON.parse(cached) as QueryAnalysis;
+    } catch {
+      /* cache miss is non-fatal */
+    }
+
+    const analysis = await this.analyzeQueryWithTimeout(query);
+
+    try {
+      await this.redis.set(cacheKey, JSON.stringify(analysis), 'EX', INTENT_CACHE_TTL);
+    } catch {
+      /* non-fatal */
+    }
+
+    return analysis;
+  }
+
+  private async analyzeQueryWithTimeout(query: string): Promise<QueryAnalysis> {
+    const fallback: QueryAnalysis = {
+      intent: 'general',
+      category_filter: null,
+      rewritten_query: query,
+    };
+
+    return Promise.race<QueryAnalysis>([
+      this.analyzeQuery(query),
+      new Promise<QueryAnalysis>((resolve) =>
+        setTimeout(() => resolve(fallback), INTENT_LLM_TIMEOUT_MS),
+      ),
+    ]).catch(() => fallback);
+  }
+
+  private hashQuery(query: string): string {
+    const normalized = query.trim().toLowerCase().replace(/\s+/g, ' ');
+    return crypto.createHash('md5').update(normalized).digest('hex').substring(0, 16);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -457,73 +630,8 @@ export class AiChatbotService {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // RETRIEVAL — Query Router
+  // RETRIEVAL — FAQ / guides (used by platform_qa intent)
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Query router:
-   * - find_job / find_candidate → Graph RAG (denormalized, cached, reranked)
-   * - platform_qa / general    → Legacy vector search on knowledge_embeddings
-   */
-  private async routeRetrieval(
-    embedding: number[],
-    analysis: QueryAnalysis,
-    rawQuery: string,
-  ): Promise<RetrieveResult> {
-    if (!embedding || embedding.length === 0) {
-      return { context: '', sources: [], references: [] };
-    }
-
-    // ── Route 1: Graph RAG for job/candidate search ──────────────
-    if (analysis.intent === 'find_job' || analysis.intent === 'find_candidate') {
-      try {
-        const filter: MetadataFilter = {
-          nodeType: analysis.intent === 'find_job' ? 'job' : 'worker_service',
-          isAvailable: true,
-        };
-        const graphResult = await this.graphRagService.retrieve(
-          rawQuery,
-          embedding,
-          filter,
-        );
-
-        if (graphResult.nodes.length > 0) {
-          const references = graphResult.nodes.map((n) => {
-            if (n.nodeType === 'job') {
-              const jobId = n.sourceId.replace('job_', '');
-              return {
-                type: 'job' as const,
-                title: n.title,
-                url: `/jobs/${jobId}`,
-                salary: n.priceDisplay ?? undefined,
-                location: n.address ?? undefined,
-                category: n.categoryName ?? undefined,
-              };
-            }
-            const workerId = n.ownerId ?? '';
-            return {
-              type: 'worker' as const,
-              title: n.title,
-              url: `/users/${workerId}`,
-              price: n.priceDisplay ?? undefined,
-              location: n.provinceCode ?? undefined,
-              isAvailable: n.isAvailable,
-            };
-          });
-          return {
-            context: graphResult.context,
-            sources: graphResult.sources,
-            references,
-          };
-        }
-      } catch (err) {
-        this.logger.warn('[GraphRAG] Retrieval failed, falling back to vector', err);
-      }
-    }
-
-    // ── Route 2: Legacy vector search (FAQ, platform_qa, general) ─
-    return this.retrieveContextLegacy(embedding, analysis);
-  }
 
   /** FAQ/guide/policy retrieval — queries graph_knowledge with static node_types */
   private async retrieveContextLegacy(
