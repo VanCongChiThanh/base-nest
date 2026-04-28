@@ -32,6 +32,8 @@ jobs:
           host: ${{ secrets.DO_HOST }}
           username: root
           key: ${{ secrets.DO_SSH_KEY }}
+          # Default is ~10m; docker build + compose health wait can exceed that on small droplets.
+          command_timeout: 45m
           script: |
             cd /app/gigwork
             
@@ -39,7 +41,7 @@ jobs:
             echo "${{ secrets.ENV_FILE }}" > .env
             
             # 2. Build image
-            docker compose build --no-cache api
+            docker compose build api
             
             # 3. swap image
             docker compose up -d
