@@ -268,6 +268,147 @@ export class GraphRagService {
     return true;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PUBLIC: FAQ / Guide / Policy CRUD (admin)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  static readonly FAQ_NODE_TYPES = ['faq', 'guide', 'policy', 'safety', 'general'] as const;
+
+  async listFaqNodes(): Promise<{
+    id: string; sourceId: string; nodeType: string; title: string;
+    content: string; hasEmbedding: boolean; isActive: boolean;
+    createdAt: string; updatedAt: string;
+  }[]> {
+    const rows = await this.dataSource.query(
+      `SELECT id, source_id, node_type, title, content,
+              (embedding IS NOT NULL) AS has_embedding,
+              is_active, created_at, updated_at
+       FROM graph_knowledge
+       WHERE node_type = ANY($1)
+       ORDER BY node_type, created_at ASC`,
+      [GraphRagService.FAQ_NODE_TYPES],
+    );
+    return rows.map((r: any) => ({
+      id: r.id,
+      sourceId: r.source_id,
+      nodeType: r.node_type,
+      title: r.title,
+      content: r.content,
+      hasEmbedding: r.has_embedding,
+      isActive: r.is_active,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }));
+  }
+
+  async upsertFaqNode(data: {
+    id?: string;
+    nodeType: string;
+    title: string;
+    content: string;
+  }): Promise<{ id: string; sourceId: string }> {
+    const sourceId = data.id
+      ? undefined
+      : `faq_${data.title.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 80)}`;
+
+    const content = `${data.title}\n${data.content}`;
+    const contentHash = this.hash(content);
+
+    let embeddingVector: number[] = [];
+    try {
+      if (this.geminiService.isAvailable) {
+        embeddingVector = await this.geminiService.embedText(content);
+      }
+    } catch (err: any) {
+      this.logger.warn(`[FAQ] Embed failed: ${err?.message}`);
+    }
+    const vectorStr = embeddingVector.length ? `[${embeddingVector.join(',')}]` : null;
+
+    if (data.id) {
+      await this.dataSource.query(
+        `UPDATE graph_knowledge
+         SET title = $1, content = $2, node_type = $3, content_hash = $4,
+             ${vectorStr ? 'embedding = $5::vector,' : ''}
+             is_active = true, updated_at = NOW()
+         WHERE id = $${vectorStr ? 6 : 5}`,
+        vectorStr
+          ? [data.title, content, data.nodeType, contentHash, vectorStr, data.id]
+          : [data.title, content, data.nodeType, contentHash, data.id],
+      );
+      await this.invalidateCache('faq');
+      return { id: data.id, sourceId: '' };
+    }
+
+    const result = await this.dataSource.query(
+      `INSERT INTO graph_knowledge
+         (id, node_type, source_id, title, content, skill_names, edges, metadata,
+          is_active, is_available, review_count, completed_count, content_hash,
+          ${vectorStr ? 'embedding,' : ''}
+          created_at, updated_at)
+       VALUES
+         (gen_random_uuid(), $1, $2, $3, $4, '[]', '[]', '{}',
+          true, true, 0, 0, $5,
+          ${vectorStr ? '$6::vector,' : ''}
+          NOW(), NOW())
+       RETURNING id, source_id`,
+      vectorStr
+        ? [data.nodeType, sourceId, data.title, content, contentHash, vectorStr]
+        : [data.nodeType, sourceId, data.title, content, contentHash],
+    );
+    await this.invalidateCache('faq');
+    return { id: result[0].id, sourceId: result[0].source_id };
+  }
+
+  async deleteFaqNode(id: string): Promise<void> {
+    await this.dataSource.query(
+      `UPDATE graph_knowledge SET is_active = false, updated_at = NOW() WHERE id = $1`,
+      [id],
+    );
+    await this.invalidateCache('faq');
+  }
+
+  /**
+   * Backfill embeddings for FAQ/guide/policy/safety nodes that already exist
+   * in graph_knowledge but have embedding = NULL (e.g. Gemini was down during seed).
+   * Returns number of nodes successfully embedded.
+   */
+  async syncFaqNodes(): Promise<number> {
+    const rows: { id: string; source_id: string; content: string }[] =
+      await this.dataSource.query(
+        `SELECT id, source_id, content
+         FROM graph_knowledge
+         WHERE node_type IN ('faq', 'guide', 'policy', 'safety', 'general')
+           AND is_active = true
+           AND (embedding IS NULL OR embedding::text = '')
+         ORDER BY created_at ASC`,
+      );
+
+    if (rows.length === 0) return 0;
+
+    this.logger.log(`[GraphRAG] Backfilling embeddings for ${rows.length} FAQ/guide nodes`);
+    let synced = 0;
+
+    for (const row of rows) {
+      try {
+        if (!this.geminiService.isAvailable || !row.content) continue;
+        const embedding = await this.geminiService.embedText(row.content);
+        if (!embedding.length) continue;
+        const vectorStr = `[${embedding.join(',')}]`;
+        await this.dataSource.query(
+          `UPDATE graph_knowledge SET embedding = $1::vector, updated_at = NOW() WHERE id = $2`,
+          [vectorStr, row.id],
+        );
+        synced++;
+        await new Promise((r) => setTimeout(r, 300));
+      } catch (err: any) {
+        this.logger.warn(`[GraphRAG] FAQ embed failed for ${row.source_id}: ${err?.message}`);
+      }
+    }
+
+    this.logger.log(`[GraphRAG] FAQ backfill done: ${synced}/${rows.length} embedded`);
+    return synced;
+  }
+
   /** Deactivate a graph node (job closed/cancelled) */
   async deactivateNode(sourceId: string): Promise<void> {
     await this.graphRepo.update({ sourceId }, { isActive: false });

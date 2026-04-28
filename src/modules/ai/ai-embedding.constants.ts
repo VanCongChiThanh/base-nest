@@ -10,6 +10,8 @@ export enum EmbeddingJobName {
   SYNC_WORKER_SERVICE = 'sync-worker-service',
   /** Batch sync: scan all open jobs & active services for missing/stale embeddings */
   BATCH_SYNC_ALL = 'batch-sync-all',
+  /** Selective batch sync with explicit target list */
+  BATCH_SYNC_SELECTIVE = 'batch-sync-selective',
   /** Remove embedding when a job is cancelled/completed */
   REMOVE_JOB = 'remove-job',
   /** Sync a single job into graph_knowledge (denormalized) */
@@ -19,6 +21,15 @@ export enum EmbeddingJobName {
   /** Deactivate a graph_knowledge node */
   REMOVE_GRAPH_NODE = 'remove-graph-node',
 }
+
+/**
+ * Which node types to include in a selective sync.
+ * - jobs        → graph nodes for all OPEN jobs
+ * - workers     → graph nodes for all active worker_services
+ * - faq         → backfill embeddings for faq/guide/policy/safety seeds
+ */
+export type SyncTarget = 'jobs' | 'workers' | 'faq';
+export const ALL_SYNC_TARGETS: SyncTarget[] = ['jobs', 'workers', 'faq'];
 
 /** Payload types */
 export interface SyncJobPayload {
@@ -43,4 +54,8 @@ export interface SyncGraphWorkerPayload {
 
 export interface RemoveGraphNodePayload {
   sourceId: string;
+}
+
+export interface BatchSyncSelectivePayload {
+  targets: SyncTarget[];
 }
