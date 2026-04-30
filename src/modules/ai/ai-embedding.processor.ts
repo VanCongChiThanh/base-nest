@@ -241,6 +241,43 @@ export class AiEmbeddingProcessor {
     }
 
     this.logger.log(`[Queue] ✅ Selective sync done: ${JSON.stringify(result)}`);
+
+    // Thông báo admin (cùng cơ chế với BATCH_SYNC_ALL)
+    const parts: string[] = [];
+    if (result.jobs !== undefined) {
+      parts.push(`${result.jobs} việc làm`);
+    }
+    if (result.workers !== undefined) {
+      parts.push(`${result.workers} dịch vụ lao động`);
+    }
+    if (result.faq !== undefined) {
+      parts.push(`${result.faq} mục FAQ / hướng dẫn (embedding)`);
+    }
+    const message =
+      parts.length > 0
+        ? `Đã đồng bộ: ${parts.join(', ')}.`
+        : 'Đồng bộ AI (theo lựa chọn) đã hoàn tất.';
+
+    try {
+      const admins = await this.dataSource.query('SELECT id FROM users WHERE role = $1', [
+        'ADMIN',
+      ]);
+      if (admins?.length > 0) {
+        await this.notificationHelper.sendToMany(
+          admins.map((a: { id: string }) => a.id),
+          NotificationType.SYSTEM,
+          undefined,
+          {
+            title: 'Đồng bộ AI Graph hoàn tất',
+            message,
+            type: 'AI_SYNC_COMPLETED',
+          },
+        );
+      }
+    } catch (notifyErr: unknown) {
+      this.logger.error('Lỗi gửi thông báo selective sync', (notifyErr as Error)?.stack);
+    }
+
     return result;
   }
 

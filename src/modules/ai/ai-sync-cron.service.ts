@@ -27,7 +27,7 @@ export class AiSyncCronService {
   // FAQ/guide/policy là data tĩnh, không cần sync theo giờ.
   // Chỉ sync jobs + workers để bắt dữ liệu mới/thay đổi.
 
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron(CronExpression.EVERY_WEEK)
   async handleCronSync() {
     this.logger.log('Cron tick → dispatching selective sync [jobs, workers]');
     await this.enqueueBatchSyncSelective(['jobs', 'workers']);
