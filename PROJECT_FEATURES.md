@@ -40,9 +40,10 @@
 
 | Chức năng | Trạng thái | Mô tả |
 |---|---|---|
-| Đăng việc | ✅ Hoàn thành | Employer tạo job với title, description, salary, location, skills |
+| Đăng việc (GIG/PART_TIME) | ✅ Hoàn thành | Employer tạo job với title, description, salary, location, skills |
+| Đăng việc (ONLINE) | ✅ Hoàn thành | **Upwork-style**: Budget khoán, Hourly rate, Deadline, Scope, Experience level |
 | Danh sách việc | ✅ Hoàn thành | Tìm kiếm, lọc theo province, ward, category, salary, search text |
-| Chi tiết việc | ✅ Hoàn thành | Xem full thông tin job + employer profile |
+| Chi tiết việc | ✅ Hoàn thành | Xem full thông tin job + hiển thị linh động theo JobType |
 | Lọc theo khoảng cách | ✅ Hoàn thành | Tính khoảng cách Haversine từ tọa độ user |
 | Ưu tiên employer uy tín | ✅ Hoàn thành | Sort theo badge (TOP > TRUSTED > VERIFIED > NONE) |
 | Hủy việc | ✅ Hoàn thành | Employer hủy, thông báo cho worker đã được chấp nhận |
@@ -60,31 +61,42 @@
 | Chat trong application | ✅ Hoàn thành | Application chat qua WebSocket |
 | Quota giới hạn ứng tuyển | ✅ Hoàn thành | Theo gói subscription (daily limit) |
 
-### 5. Tiến Trình Công Việc (Progress) — LOẠI THỜI VỤ (GIG)
+### 5. Tiến Trình Công Việc (Progress Tracking)
 
 | Chức năng | Trạng thái | Mô tả |
 |---|---|---|
 | Assignment tự động | ✅ Hoàn thành | Khi employer accept → tạo JobAssignment |
-| Check-in | ✅ Hoàn thành | Worker xác nhận bắt đầu làm (bấm nút, không GPS) |
-| Hoàn thành | ✅ Hoàn thành | Worker bấm hoàn thành → COMPLETED |
-| Progress steps | ✅ Hoàn thành | 6 bước: Đã ứng tuyển → Đang xem xét → Đã chấp nhận → Check-in → Đang làm → Hoàn thành |
+| Luồng GIG/PART_TIME | ✅ Hoàn thành | Check-in → Đang làm → Hoàn thành |
+| Luồng ONLINE (Escrow) | ✅ Hoàn thành | **Milestone-based**: Tạo milestone → Funding → Submit → Release tiền |
+| Progress steps | ✅ Hoàn thành | Hiển thị các bước tiến triển tùy biến theo loại job |
 | Employer xem tiến trình | ✅ Hoàn thành | Xem progress tất cả worker của 1 job |
 
-**Luồng hiện tại (Thời vụ/GIG):**
+**Luồng Offline (GIG):**
 ```
 Đăng việc → Ứng tuyển → Chấp nhận → Check-in → Đang làm → Hoàn thành → Xác nhận thanh toán → Đánh giá
 ```
 
-### 6. Thanh Toán & Tranh Chấp (Payment)
+**Luồng Online (Milestones):**
+```
+Đăng việc → Ứng tuyển → Chấp nhận → Giao task → Funding (Escrow) → Submit → Review → Release → Đánh giá
+```
+
+### 6. Thanh Toán & Escrow (Payment System)
 
 | Chức năng | Trạng thái | Mô tả |
 |---|---|---|
-| Xác nhận nhận tiền | ✅ Hoàn thành | Worker confirm đã nhận tiền (sau COMPLETED) |
-| Lịch sử thanh toán | ✅ Hoàn thành | Worker xem danh sách payments |
-| Tạo tranh chấp | ✅ Hoàn thành | Employer/Worker tạo dispute |
+| PayOS Integration | ✅ Hoàn thành | Tích hợp cổng thanh toán PayOS để nạp tiền vào Escrow |
+| Escrow System | ✅ Hoàn thành | Nền tảng giữ tiền trung gian cho ONLINE jobs |
+| Milestone Management | ✅ Hoàn thành | Chia nhỏ dự án, thanh toán theo từng phần công việc |
+| Internal Wallet | ✅ Hoàn thành | Theo dõi số dư, nạp tiền, rút tiền, release tiền từ Escrow |
+| Xác nhận nhận tiền | ✅ Hoàn thành | Worker confirm đã nhận tiền (cho job Offline) |
+| Lịch sử thanh toán | ✅ Hoàn thành | Xem danh sách các giao dịch (Nạp/Rút/Release) |
+| Tạo tranh chấp | ✅ Hoàn thành | Employer/Worker tạo dispute khi có vấn đề milestone |
 | Giải quyết tranh chấp | ✅ Hoàn thành | Admin resolve/dismiss dispute |
 
-> **Lưu ý:** Nền tảng chỉ **xác nhận** thanh toán (confirm receipt). Tiền được trả trực tiếp giữa employer ↔ worker, nền tảng không xử lý dòng tiền.
+> **Lưu ý:** 
+> - Đối với Offline job: Nền tảng chỉ xác nhận (confirm receipt).
+> - Đối với Online job: Nền tảng là trung gian thanh toán qua hệ thống Escrow.
 
 ### 7. Đánh Giá (Review)
 
@@ -108,8 +120,8 @@
 |---|---|---|
 | Scam Detection | ✅ Hoàn thành | Phát hiện tin lừa đảo: rule-based + vector similarity + Gemini AI |
 | RAG Chatbot | ✅ Hoàn thành | Chatbot hỗ trợ Q&A + tìm kiếm việc/ứng viên từ knowledge base |
+| AI Candidate Matching | ✅ Hoàn thành | **1-Click Search**: Tự động gợi ý Top 10 ứng viên phù hợp nhất cho Job (JSON output) |
 | Knowledge Sync (Queue) | ✅ Hoàn thành | **BullMQ (Redis)** — embedding chạy async, auto khi tạo/cập nhật job |
-| AI Candidate Search | ✅ Hoàn thành | Tìm worker phù hợp qua natural language |
 | Content Change Detection | ✅ Hoàn thành | Batch sync phát hiện content thay đổi → tự động re-embed |
 
 ### 10. Admin
@@ -160,6 +172,7 @@
 | | **Thông báo Admin** | Gửi system notification tới tất cả tài khoản Role.ADMIN khi hoàn thành batch sync AI |
 | | **Sửa lỗi embedding NULL** | Dùng raw SQL insert/update với `::vector` cast để bypass TypeORM/pgvector mismatch |
 | 2026-04-23 | **Cập nhật nghiệp vụ phân quyền & gói cước** | User eKYC: FREE 2 bài/tháng, PRO 59k 10 bài/tháng + AI chatbot; ORGANIZATION: Basic 10 bài/tháng, Unlimited 299k không giới hạn + AI match ứng viên; trial 3 tháng đầu khi nâng gói Unlimited |
+| 2026-05-02 | **ONLINE Job & Escrow System** | Tách luồng ONLINE (Upwork-style), tích hợp PayOS Escrow, Milestone payment, Wallet, AI Match 1-click |
 
 ---
 

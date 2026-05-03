@@ -1,267 +1,74 @@
-# NestJS Base Backend
+# 🚀 GigWork Backend — Advanced Gig Economy Platform with GraphRAG
 
-Một NestJS backend source base theo best practice, phù hợp làm starter project cho các dự án thực tế.
+[![NestJS](https://img.shields.io/badge/NestJS-E0234E?style=for-the-badge&logo=nestjs&logoColor=white)](https://nestjs.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/redis-%23DD0031.svg?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
+[![Google Gemini](https://img.shields.io/badge/Google_Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
+[![BullMQ](https://img.shields.io/badge/BullMQ-FF4500?style=for-the-badge&logo=redis&logoColor=white)](https://bullmq.io/)
 
-## 🚀 Tính năng
+**GigWork Backend** is the high-performance core of a professional gig marketplace. It features a state-of-the-art AI engine, a secure financial escrow system, and identity verification modules.
 
-- ✅ **Authentication** - Register, Login với JWT (Access + Refresh Token)
-- ✅ **Google OAuth 2.0** - Đăng nhập bằng Google
-- ✅ **Role-based Authorization** - ADMIN, USER roles với Guards
-- ✅ **Notifications** - Hệ thống thông báo với hỗ trợ điều hướng
-- ✅ **AWS S3 Upload** - Presigned URL để upload file trực tiếp
-- ✅ **Mail Service** - Gửi email xác thực và reset password
-- ✅ **Redis** - Lưu trữ refresh tokens
-- ✅ **TypeORM + PostgreSQL** - Database với migrations
+---
 
-## 📋 Yêu cầu
+## 🌟 Advanced Technical Features
 
-- Node.js >= 18.x
-- PostgreSQL >= 14.x
-- Redis >= 6.x
-- Docker (optional)
+### 🧠 Hybrid GraphRAG Engine
+Unlike traditional RAG, GigWork implements a **Hybrid GraphRAG** architecture:
+- **Denormalized Graph Knowledge:** Uses a `graph_knowledge` store that combines entities, rich relationships, and precomputed statistics.
+- **Multidimensional Retrieval:** Combines metadata pre-filtering (location, price, rating) with **Vector Cosine Similarity** (pgvector).
+- **Composite Reranker:** A weighted scoring system (50% Vector, 25% Rating, 15% Experience, 10% Availability) to provide the most relevant candidates.
+- **Query Routing:** Intelligent intent analysis to route between GraphRAG (Jobs/Workers) and Legacy RAG (FAQ/General QA).
+- **Redis Caching:** High-speed retrieval for frequent queries with a ~50ms response time on cache hits.
 
-## 🛠️ Cài đặt
+### 💰 Trusted Financial Infrastructure (Escrow & Wallet)
+- **PayOS Payment Gateway:** Seamless integration for automated funding and milestone-based payments.
+- **Platform-Internal Escrow:** Funds are securely held by the platform and released only upon task completion and dual confirmation.
+- **Milestone-based Workflow:** Professional project management allowing fixed-price projects to be split into manageable payment phases.
+- **Internal Wallet System:** Real-time balance tracking, deposit/withdrawal history, and automated financial state transitions.
 
-### 1. Clone và cài đặt dependencies
+### 🤖 AI-Powered Candidate Matching
+- **1-Click Search:** High-precision candidate discovery for organizations, outputting structured JSON reasoning for "top match" suggestions.
+- **Scam Detection AI:** Real-time analysis of job postings using semantic patterns and vector-based anomaly detection to protect users.
+
+### 🔐 Enterprise-Grade Security & Identity
+- **VNPT eKYC:** Integrated AI identity verification (Face Match, OCR) to ensure a community of verified, real users.
+- **Identity Privacy:** Granular controls for personal data visibility (Public / Accepted Only / Private).
+- **Token Rotation:** Secure authentication flow with JWT Access/Refresh tokens stored in Redis.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Framework:** NestJS (TypeScript)
+- **Database:** PostgreSQL + TypeORM + **pgvector**
+- **AI Stack:** Google Gemini Pro, Text Embeddings, GraphRAG logic
+- **Background Tasks:** BullMQ + Redis
+- **Cloud Storage:** AWS S3 (Presigned URLs)
+- **Real-time:** Socket.io & Firebase Realtime DB
+
+---
+
+## 📁 Project Architecture
 
 ```bash
-npm install
-```
-
-### 2. Cấu hình environment
-
-```bash
-cp .env.example .env
-# Chỉnh sửa .env với các giá trị phù hợp
-```
-
-### 3. Khởi động database (với Docker)
-
-```bash
-docker-compose up -d
-```
-
-### 4. Chạy ứng dụng
-
-```bash
-# Development
-npm run start:dev
-
-# Production
-npm run build
-npm run start:prod
-```
-
-## 📚 API Endpoints
-
-### Authentication
-
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| POST | `/api/auth/register` | Đăng ký tài khoản | ❌ |
-| POST | `/api/auth/login` | Đăng nhập | ❌ |
-| POST | `/api/auth/refresh` | Refresh tokens | ❌ |
-| POST | `/api/auth/logout` | Đăng xuất | ✅ |
-| GET | `/api/auth/verify-email` | Xác thực email | ❌ |
-| POST | `/api/auth/forgot-password` | Yêu cầu reset password | ❌ |
-| POST | `/api/auth/reset-password` | Reset password | ❌ |
-| GET | `/api/auth/google` | Đăng nhập bằng Google | ❌ |
-
-### User
-
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| GET | `/api/users/me` | Lấy thông tin user hiện tại | ✅ |
-| PATCH | `/api/users/me` | Cập nhật thông tin user | ✅ |
-
-### Notifications
-
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| GET | `/api/notifications` | Lấy danh sách thông báo | ✅ |
-| PATCH | `/api/notifications/:id/read` | Đánh dấu đã đọc | ✅ |
-| PATCH | `/api/notifications/read-all` | Đánh dấu tất cả đã đọc | ✅ |
-| DELETE | `/api/notifications/:id` | Xóa thông báo | ✅ |
-
-### Upload
-
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| POST | `/api/uploads/presigned-url` | Lấy presigned URL để upload | ✅ |
-
-## 🔐 Authentication Flow
-
-### Register & Login
-
-```
-┌─────────┐      POST /auth/register      ┌─────────┐
-│ Client  │ ──────────────────────────────▶│ Server  │
-└─────────┘                                └─────────┘
-                                                │
-                                                ▼
-                                        Tạo user + Hash password
-                                                │
-                                                ▼
-                                        Gửi email verification
-                                                │
-                                                ▼
-┌─────────┐      Response: "Check email"  ┌─────────┐
-│ Client  │ ◀──────────────────────────────│ Server  │
-└─────────┘                                └─────────┘
-
-┌─────────┐      POST /auth/login         ┌─────────┐
-│ Client  │ ──────────────────────────────▶│ Server  │
-│         │      { email, password }       │         │
-└─────────┘                                └─────────┘
-                                                │
-                                                ▼
-                                        Validate credentials
-                                                │
-                                                ▼
-                                        Generate tokens
-                                                │
-                                                ▼
-                                        Lưu refresh token vào Redis
-                                                │
-                                                ▼
-┌─────────┐      { accessToken,           ┌─────────┐
-│ Client  │ ◀──────refreshToken }──────────│ Server  │
-└─────────┘                                └─────────┘
-```
-
-### Google OAuth Flow
-
-```
-┌─────────┐      GET /auth/google         ┌─────────┐      Redirect      ┌─────────┐
-│ Client  │ ──────────────────────────────▶│ Server  │ ──────────────────▶│ Google  │
-└─────────┘                                └─────────┘                    └─────────┘
-                                                                               │
-                                                                    User đồng ý
-                                                                               │
-                                                                               ▼
-┌─────────┐      Redirect với tokens      ┌─────────┐      Callback      ┌─────────┐
-│ Client  │ ◀──────────────────────────────│ Server  │ ◀──────────────────│ Google  │
-└─────────┘                                └─────────┘                    └─────────┘
-                                                │
-                                                ▼
-                                    Tìm/Tạo user từ Google profile
-                                                │
-                                                ▼
-                                        Generate tokens
-```
-
-### Refresh Token Rotation
-
-```
-┌─────────┐      POST /auth/refresh       ┌─────────┐
-│ Client  │ ──────────────────────────────▶│ Server  │
-│         │      { refreshToken }          │         │
-└─────────┘                                └─────────┘
-                                                │
-                                                ▼
-                                    Validate refresh token trong Redis
-                                                │
-                                                ▼
-                                    Xóa refresh token cũ (rotation)
-                                                │
-                                                ▼
-                                    Tạo tokens mới
-                                                │
-                                                ▼
-                                    Lưu refresh token mới vào Redis
-                                                │
-                                                ▼
-┌─────────┐      { accessToken,           ┌─────────┐
-│ Client  │ ◀──────refreshToken (mới) }────│ Server  │
-└─────────┘                                └─────────┘
-```
-
-## 📤 S3 Upload Flow
-
-```
-┌─────────┐      POST /uploads/presigned-url     ┌─────────┐
-│ Client  │ ─────────────────────────────────────▶│ Server  │
-│         │      { fileName, fileType, fileSize } │         │
-└─────────┘                                       └─────────┘
-                                                       │
-                                                       ▼
-                                            Validate file info
-                                                       │
-                                                       ▼
-                                            Generate presigned URL từ S3
-                                                       │
-                                                       ▼
-┌─────────┐      { uploadUrl, fileUrl, key }     ┌─────────┐
-│ Client  │ ◀─────────────────────────────────────│ Server  │
-└─────────┘                                       └─────────┘
-     │
-     │ PUT uploadUrl
-     │ (Upload trực tiếp lên S3)
-     ▼
-┌─────────┐
-│   S3    │
-└─────────┘
-```
-
-## 🔔 Notification System
-
-Notifications hỗ trợ điều hướng với các fields:
-
-| Field | Description |
-|-------|-------------|
-| `type` | Loại notification (SYSTEM, ORDER, PAYMENT, USER, PROMOTION) |
-| `referenceId` | ID đối tượng liên quan |
-| `link` | URL để frontend điều hướng |
-
-Ví dụ response:
-
-```json
-{
-  "id": "uuid",
-  "title": "Đơn hàng đã được xác nhận",
-  "content": "Đơn hàng #123 của bạn đã được xác nhận",
-  "type": "ORDER",
-  "referenceId": "order-123",
-  "link": "/orders/order-123",
-  "isRead": false,
-  "createdAt": "2024-01-15T10:00:00.000Z"
-}
-```
-
-## 📁 Cấu trúc thư mục
-
-```
 src/
-├── common/
-│   ├── decorators/       # @Roles, @Public, @CurrentUser
-│   ├── enums/            # Role, NotificationType
-│   ├── filters/          # HttpExceptionFilter
-│   └── guards/           # JwtAuthGuard, RolesGuard
-├── config/               # Database, Redis, JWT, AWS, Mail configs
 ├── modules/
-│   ├── auth/             # Authentication + Google OAuth
-│   ├── user/             # User management
-│   ├── notification/     # Notification system
-│   ├── upload/           # S3 presigned URL
-│   └── mail/             # Email service
-├── app.module.ts
-└── main.ts
+│   ├── ai/              # GraphRAG Core, Matching logic, Scam Detection
+│   ├── job/             # GIG / PART_TIME / ONLINE (Escrow) workflows
+│   ├── payment/         # Escrow system, Wallet, PayOS integration
+│   ├── ekyc/            # Identity verification (VNPT SDK)
+│   ├── subscription/    # Feature Gating & Quota management
+│   └── ...
 ```
 
-## 🔧 Environment Variables
+---
 
-Xem file `.env.example` để biết các biến môi trường cần cấu hình.
+## 🚀 Setup & Installation
 
-## 📝 Best Practices
+1. **Environment:** Copy `.env.example` to `.env` and fill in your Gemini API Key, PayOS Credentials, and Database URL.
+2. **Docker:** Run `docker-compose up -d` to start PostgreSQL and Redis.
+3. **Run:** `npm run start:dev` for development or `npm run build && npm run start:prod` for production.
 
-- ✅ DTOs với class-validator
-- ✅ Global Exception Filter
-- ✅ Global Validation Pipe
-- ✅ Không hardcode - sử dụng ConfigModule
-- ✅ Password hashing với bcrypt
-- ✅ JWT refresh token rotation
-- ✅ Role-based authorization
-
-## 📄 License
-
-MIT
+---
+## 📝 License
+Licensed under MIT.

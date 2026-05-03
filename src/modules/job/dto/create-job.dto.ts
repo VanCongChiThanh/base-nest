@@ -7,11 +7,19 @@ import {
   IsArray,
   IsUUID,
   Min,
+  IsEnum,
+  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { JobSalaryType, JobType } from '../../../common/enums';
+import {
+  JobSalaryType,
+  JobType,
+  OnlinePaymentType,
+  ExperienceLevel,
+} from '../../../common/enums';
 
 export class CreateJobDto {
+  // ── Core (all types) ──────────────────────
   @IsString()
   @IsNotEmpty()
   title: string;
@@ -20,37 +28,59 @@ export class CreateJobDto {
   @IsNotEmpty()
   description: string;
 
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  skillIds?: string[];
+
+  @IsOptional()
+  @IsEnum(JobType)
+  jobType?: JobType;
+
+  // ── GIG / PART_TIME only ──────────────────
+  /** Required for GIG/PART_TIME. Not used for ONLINE. */
+  @ValidateIf((o) => o.jobType !== JobType.ONLINE)
   @IsNumber()
   @Min(0)
   @Type(() => Number)
-  salaryPerHour: number;
+  salaryPerHour?: number;
 
   @IsOptional()
-  @IsString()
+  @IsEnum(JobSalaryType)
   salaryType?: JobSalaryType;
 
+  @IsOptional()
   @IsNumber()
   @Min(1)
   @Type(() => Number)
-  requiredWorkers: number;
+  requiredWorkers?: number;
 
+  @ValidateIf((o) => o.jobType !== JobType.ONLINE)
   @IsDateString()
-  startTime: string;
+  startTime?: string;
 
+  @ValidateIf((o) => o.jobType !== JobType.ONLINE)
   @IsDateString()
-  endTime: string;
+  endTime?: string;
 
+  @ValidateIf((o) => o.jobType !== JobType.ONLINE)
   @IsNumber()
   @Type(() => Number)
-  provinceCode: number;
+  provinceCode?: number;
 
+  @ValidateIf((o) => o.jobType !== JobType.ONLINE)
   @IsNumber()
   @Type(() => Number)
-  wardCode: number;
+  wardCode?: number;
 
+  @ValidateIf((o) => o.jobType !== JobType.ONLINE)
   @IsString()
   @IsNotEmpty()
-  address: string;
+  address?: string;
 
   @IsOptional()
   @IsNumber()
@@ -62,21 +92,7 @@ export class CreateJobDto {
   @Type(() => Number)
   longitude?: number;
 
-  @IsOptional()
-  @IsUUID()
-  categoryId?: string;
-
-  @IsOptional()
-  @IsArray()
-  @IsUUID('4', { each: true })
-  skillIds?: string[];
-
-  // === Job Type ===
-  @IsOptional()
-  @IsString()
-  jobType?: JobType;
-
-  // === Part-time fields ===
+  // ── PART_TIME extra ───────────────────────
   @IsOptional()
   @IsString()
   contractDuration?: string;
@@ -89,13 +105,61 @@ export class CreateJobDto {
   @IsString()
   paymentNote?: string;
 
-  // === Online fields ===
-  @IsOptional()
+  // ── ONLINE only (Upwork-style) ────────────
+  /**
+   * FIXED_PRICE: khoán toàn bộ (cần totalBudget)
+   * HOURLY_RATE: theo giờ (cần hourlyRateMin/Max)
+   */
+  @ValidateIf((o) => o.jobType === JobType.ONLINE)
+  @IsEnum(OnlinePaymentType)
+  onlinePaymentType?: OnlinePaymentType;
+
+  /** Ngân sách tổng – bắt buộc nếu FIXED_PRICE */
+  @ValidateIf(
+    (o) =>
+      o.jobType === JobType.ONLINE &&
+      o.onlinePaymentType === OnlinePaymentType.FIXED_PRICE,
+  )
   @IsNumber()
+  @Min(1000)
   @Type(() => Number)
   totalBudget?: number;
 
+  /** Rate tối thiểu đ/giờ – dùng khi HOURLY_RATE */
+  @ValidateIf(
+    (o) =>
+      o.jobType === JobType.ONLINE &&
+      o.onlinePaymentType === OnlinePaymentType.HOURLY_RATE,
+  )
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  hourlyRateMin?: number;
+
+  /** Rate tối đa đ/giờ – dùng khi HOURLY_RATE */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  hourlyRateMax?: number;
+
+  /** Deadline hoàn thành dự án (ONLINE) */
+  @ValidateIf((o) => o.jobType === JobType.ONLINE)
+  @IsDateString()
+  deadline?: string;
+
+  /** Mức kinh nghiệm yêu cầu */
+  @IsOptional()
+  @IsEnum(ExperienceLevel)
+  experienceLevel?: ExperienceLevel;
+
+  /** Loại sản phẩm giao nộp */
   @IsOptional()
   @IsString()
   deliverableType?: string;
+
+  /** Phạm vi dự án (ngắn gọn) */
+  @IsOptional()
+  @IsString()
+  projectScope?: string;
 }

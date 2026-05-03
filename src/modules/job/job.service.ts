@@ -78,8 +78,10 @@ export class JobService {
   async createJob(employerId: string, dto: CreateJobDto): Promise<Job> {
     const { skillIds, ...jobData } = dto;
 
-    if (new Date(dto.endTime) <= new Date(dto.startTime)) {
-      throw new BadRequestException(JOB_ERRORS.JOB_INVALID_TIME);
+    if (dto.startTime && dto.endTime) {
+      if (new Date(dto.endTime) <= new Date(dto.startTime)) {
+        throw new BadRequestException(JOB_ERRORS.JOB_INVALID_TIME);
+      }
     }
 
     const job = this.jobRepository.create({
@@ -692,9 +694,9 @@ export class JobService {
       jobId: application.jobId,
       jobTitle: application.job.title,
       jobAddress: application.job.address,
-      startTime: application.job.startTime,
-      endTime: application.job.endTime,
-      salaryPerHour: application.job.salaryPerHour,
+      startTime: application.job.startTime || application.job.deadline || application.job.createdAt,
+      endTime: application.job.endTime || application.job.deadline || application.job.createdAt,
+      salaryPerHour: application.job.salaryPerHour || 0,
       currentStep,
       steps,
       workerInfo,
