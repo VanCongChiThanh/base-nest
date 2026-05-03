@@ -148,13 +148,9 @@ classDiagram
     +string contractDuration
     +string workSchedule
     +string paymentNote
-    +'total_budget', name
-    +'decimal', type
-    +12, precision
-    +2, scale
-    +true, nullable
-    +number totalBudget
-    +string deliverableType
+    +OnlinePaymentType onlinePaymentType
+    +ExperienceLevel experienceLevel
+    +string projectScope
     +JobSkillArray jobSkills
     +JobApplicationArray applications
     +Date createdAt
@@ -512,6 +508,40 @@ classDiagram
     +Date createdAt
     +Date updatedAt
   }
+  class Wallet {
+    +string id
+    +string userId
+    +User user
+    +number balance
+    +Date updatedAt
+  }
+  class Escrow {
+    +string id
+    +string jobId
+    +Job job
+    +string employerId
+    +User employer
+    +string workerId
+    +User worker
+    +number totalAmount
+    +EscrowStatus status
+    +Date paidAt
+    +Date releasedAt
+    +MilestoneArray milestones
+    +Date createdAt
+  }
+  class Milestone {
+    +string id
+    +string escrowId
+    +Escrow escrow
+    +string title
+    +number amount
+    +MilestoneStatus status
+    +string submission
+    +Date submittedAt
+    +Date approvedAt
+    +Date createdAt
+  }
 
 User "1" <-- "*" ChatSession : ManyToOne
 User "1" <-- "*" SavedJob : ManyToOne
@@ -555,4 +585,8 @@ User "1" <-- "*" VerificationRequest : ManyToOne
 VerificationRequest "1" -- "1" EkycResult : OneToOne
 User "1" <-- "*" WorkerServiceEntity : ManyToOne
 JobCategory "1" <-- "*" WorkerServiceEntity : ManyToOne
+User "1" -- "1" Wallet : OneToOne
+Job "1" -- "1" Escrow : OneToOne
+Escrow "1" --> "*" Milestone : OneToMany
+User "1" <-- "*" Escrow : ManyToOne
 ```

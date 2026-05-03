@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { AiChatbotService } from './ai-chatbot.service';
+import { AiMatchingService } from './ai-matching.service';
 import { AiSyncCronService } from './ai-sync-cron.service';
 import { ScamDetectorService, ScamAnalysisResult } from './scam-detector.service';
 import { AiChatDto, AnalyzeJobDto, AnalyzeJobContentDto, BatchSyncDto, UpsertFaqDto } from './dto';
@@ -38,6 +39,7 @@ import { Role } from '../../common/enums';
 export class AiController {
   constructor(
     private readonly chatbotService: AiChatbotService,
+    private readonly aiMatchingService: AiMatchingService,
     private readonly scamDetectorService: ScamDetectorService,
     private readonly aiSyncCronService: AiSyncCronService,
     private readonly graphRagService: GraphRagService,
@@ -114,6 +116,16 @@ export class AiController {
       return [];
     }
     return this.chatbotService.searchCandidates(q);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('match-candidates/:jobId')
+  @RequireFeature({ key: 'ai.candidate_match.enabled' })
+  async matchCandidatesForJob(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @Query('limit') limit?: number,
+  ) {
+    return this.aiMatchingService.matchCandidatesForJob(jobId, limit ? Number(limit) : 10);
   }
 
   // ==================== MANUAL SYNC ====================
@@ -197,8 +209,8 @@ export class AiController {
       companyName: job.employer?.firstName
         ? `${job.employer.firstName} ${job.employer.lastName}`
         : undefined,
-      salary: job.salaryPerHour,
       address: job.address,
+      salary: job.salaryPerHour || job.totalBudget || undefined,
     });
   }
 

@@ -8,7 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ApplicationMessage, JobApplication, JobAssignment } from './entities';
-import { ApplicationStatus, AssignmentStatus } from '../../common/enums';
+import { ApplicationStatus, AssignmentStatus, JobType } from '../../common/enums';
 import { APPLICATION_ERRORS } from '../../common/constants/error-codes.constant';
 import { ApplicationChatGateway } from './application-chat.gateway';
 
@@ -59,6 +59,12 @@ export class ApplicationChatService {
     assignment: JobAssignment | null,
   ): boolean {
     if (application.status !== ApplicationStatus.ACCEPTED) return false;
+    
+    // Đối với job ONLINE, luôn cho phép chat kể cả khi đã hoàn thành hoặc hủy
+    if (application.job?.jobType === JobType.ONLINE) {
+      return true;
+    }
+
     if (!assignment) return true;
     if (assignment.status === AssignmentStatus.COMPLETED) return false;
     if (assignment.status === AssignmentStatus.CANCELLED) return false;
@@ -70,7 +76,12 @@ export class ApplicationChatService {
       applicationId,
       userId,
     );
-    if (application.status !== ApplicationStatus.ACCEPTED) {
+    // Nếu là ONLINE, cho phép đọc nếu đã từng được ACCEPTED (kể cả sau này có COMPLETED)
+    // Để đơn giản, cứ là ONLINE và đã ACCEPTED thì cho phép (hoặc nếu yêu cầu luôn cho phép đọc)
+    if (
+      application.job?.jobType !== JobType.ONLINE &&
+      application.status !== ApplicationStatus.ACCEPTED
+    ) {
       throw new ForbiddenException(APPLICATION_ERRORS.APPLICATION_CHAT_CLOSED);
     }
     const assignment = await this.getAssignment(applicationId);

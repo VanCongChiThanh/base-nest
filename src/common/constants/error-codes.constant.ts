@@ -510,6 +510,57 @@ export const SUBSCRIPTION_ERRORS = {
   },
 } as const;
 
+// ==================== ESCROW ====================
+export const ESCROW_ERRORS = {
+  ESCROW_NOT_FOUND: {
+    code: 'ESCROW_NOT_FOUND',
+    message: 'Không tìm thấy thông tin ký quỹ',
+  },
+  ESCROW_JOB_NOT_ONLINE: {
+    code: 'ESCROW_JOB_NOT_ONLINE',
+    message: 'Chỉ job loại Online mới hỗ trợ thanh toán milestone',
+  },
+  ESCROW_ALREADY_EXISTS: {
+    code: 'ESCROW_ALREADY_EXISTS',
+    message: 'Job này đã có escrow. Không thể tạo thêm.',
+  },
+  ESCROW_NOT_FUNDED: {
+    code: 'ESCROW_NOT_FUNDED',
+    message: 'Employer chưa ký quỹ đủ tiền. Worker cần đợi employer thanh toán.',
+  },
+  ESCROW_ALREADY_FUNDED: {
+    code: 'ESCROW_ALREADY_FUNDED',
+    message: 'Escrow đã được ký quỹ',
+  },
+  ESCROW_MILESTONE_AMOUNT_MISMATCH: {
+    code: 'ESCROW_MILESTONE_AMOUNT_MISMATCH',
+    message: 'Tổng giá trị milestone phải bằng tổng ngân sách job',
+  },
+} as const;
+
+// ==================== MILESTONE ====================
+export const MILESTONE_ERRORS = {
+  MILESTONE_NOT_FOUND: {
+    code: 'MILESTONE_NOT_FOUND',
+    message: 'Không tìm thấy milestone',
+  },
+  MILESTONE_ACCESS_FORBIDDEN: {
+    code: 'MILESTONE_ACCESS_FORBIDDEN',
+    message: 'Bạn không có quyền thao tác milestone này',
+  },
+  MILESTONE_WRONG_STATUS: {
+    code: 'MILESTONE_WRONG_STATUS',
+    message: 'Milestone không ở trạng thái phù hợp để thực hiện thao tác này',
+  },
+  MILESTONE_ALREADY_RELEASED: {
+    code: 'MILESTONE_ALREADY_RELEASED',
+    message: 'Milestone này đã được giải ngân',
+  },
+  MILESTONE_LIMIT_EXCEEDED: {
+    code: 'MILESTONE_LIMIT_EXCEEDED',
+    message: 'Vui lòng nhập ít nhất 1 milestone',
+  },
+} as const;
 
 
 
@@ -535,7 +586,10 @@ export const ERROR_CODES = {
   ...PAYMENT_ERRORS,
   ...DISPUTE_ERRORS,
   ...SUBSCRIPTION_ERRORS,
+  ...ESCROW_ERRORS,
+  ...MILESTONE_ERRORS,
 } as const;
+
 
 // Type for error code keys
 export type ErrorCode = keyof typeof ERROR_CODES;

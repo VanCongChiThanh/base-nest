@@ -10,6 +10,7 @@ import { AiEmbeddingProcessor } from './ai-embedding.processor';
 import { AiController } from './ai.controller';
 import { AiDbInitService } from './ai-db-init.service';
 import { GraphRagService } from './graph-rag.service';
+import { AiMatchingService } from './ai-matching.service';
 import {
   ScamPattern,
   ChatSession,
@@ -41,6 +42,7 @@ import { NotificationModule } from '../notification/notification.module';
     GeminiService,
     GraphRagService,
     AiChatbotService,
+    AiMatchingService,
     ScamDetectorService,
     AiSeedService,
     AiSyncCronService,

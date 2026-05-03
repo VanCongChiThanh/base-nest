@@ -2,6 +2,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  forwardRef,
 } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -36,6 +37,7 @@ import {
   SUBSCRIPTION_ERRORS,
   USER_ERRORS,
 } from '../../common/constants/error-codes.constant';
+import { EscrowService } from '../payment/escrow.service';
 
 type EntitlementValue = boolean | number | string | null;
 
@@ -171,6 +173,8 @@ export class SubscriptionService {
     private readonly usageCounterRepository: Repository<UsageCounter>,
     @InjectRepository(PaymentOrder)
     private readonly paymentOrderRepository: Repository<PaymentOrder>,
+    @Inject(forwardRef(() => EscrowService))
+    private readonly escrowService: EscrowService,
   ) {}
 
   private getPayOSClient(): PayOS {
@@ -464,7 +468,13 @@ export class SubscriptionService {
       });
 
       if (!paymentOrder) {
-        this.logger.warn(`Payment order not found for orderCode: ${webhookData.orderCode}`);
+        // Nếu không phải subscription payment, thử xem có phải escrow deposit không
+        const isEscrow = await this.escrowService.handleEscrowDeposit(webhookData.orderCode);
+        if (isEscrow) {
+          return { success: true, message: 'Processed as escrow deposit' };
+        }
+        
+        this.logger.warn(`Payment order/Escrow not found for orderCode: ${webhookData.orderCode}`);
         return { success: true }; 
       }
 

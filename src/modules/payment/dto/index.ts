@@ -16,3 +16,6 @@ export class ResolveDisputeDto {
   @IsString()
   resolution: string;
 }
+
+export * from './create-escrow.dto';
+export * from './milestone.dto';
