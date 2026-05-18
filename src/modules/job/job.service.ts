@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
-import { Job, JobSkill, JobApplication, JobAssignment } from './entities';
+import { Job, JobSkill, JobApplication, JobAssignment, JobInvitation } from './entities';
 import { CreateJobDto, ApplyJobDto, JobFilterDto, CheckInJobDto } from './dto';
 import {
   JOB_ERRORS,
@@ -19,6 +19,7 @@ import {
   PrivacyVisibility,
   JobType,
 } from '../../common/enums';
+import { JobInvitationStatus } from './entities/job-invitation.entity';
 import { NotificationHelper } from '../notification';
 import { EmployerProfile, WorkerProfile } from '../profile/entities';
 import { EmployerBadge } from '../../common/enums/employer-badge.enum';
@@ -65,6 +66,8 @@ export class JobService {
     private readonly applicationRepository: Repository<JobApplication>,
     @InjectRepository(JobAssignment)
     private readonly assignmentRepository: Repository<JobAssignment>,
+    @InjectRepository(JobInvitation)
+    private readonly invitationRepository: Repository<JobInvitation>,
     @InjectRepository(EmployerProfile)
     private readonly employerProfileRepository: Repository<EmployerProfile>,
     @InjectRepository(WorkerProfile)
@@ -136,6 +139,105 @@ export class JobService {
 
     return this.findJobById(saved.id);
   }
+
+  // ==================== INVITATIONS ====================
+
+  async inviteWorkerToJob(employerId: string, jobId: string, workerId: string): Promise<JobInvitation> {
+    const job = await this.findJobById(jobId);
+    if (job.employerId !== employerId) {
+      throw new ForbiddenException('You can only invite workers to your own jobs');
+    }
+
+    if (job.status !== JobStatus.OPEN) {
+      throw new BadRequestException('Job is not open');
+    }
+
+    // Check if invitation already exists
+    const existingInv = await this.invitationRepository.findOne({
+      where: { jobId, workerId }
+    });
+
+    if (existingInv) {
+      throw new ConflictException('Worker already invited to this job');
+    }
+
+    // Check if worker already applied
+    const existingApp = await this.applicationRepository.findOne({
+      where: { jobId, workerId }
+    });
+
+    if (existingApp) {
+      throw new ConflictException('Worker has already applied for this job');
+    }
+
+    const invitation = this.invitationRepository.create({
+      jobId,
+      workerId,
+      employerId,
+      status: JobInvitationStatus.PENDING,
+    });
+    
+    const saved = await this.invitationRepository.save(invitation);
+
+    await this.notificationHelper.send(
+      workerId,
+      NotificationType.JOB_APPLICATION_RECEIVED, // Use a suitable notification type
+      jobId,
+      { jobTitle: job.title, message: 'You have been invited to apply for a job!' }
+    );
+
+    return saved;
+  }
+
+  async respondToInvitation(workerId: string, invitationId: string, accept: boolean): Promise<any> {
+    const invitation = await this.invitationRepository.findOne({
+      where: { id: invitationId },
+      relations: ['job'],
+    });
+
+    if (!invitation) throw new NotFoundException('Invitation not found');
+    if (invitation.workerId !== workerId) throw new ForbiddenException('Not your invitation');
+    if (invitation.status !== JobInvitationStatus.PENDING) {
+      throw new BadRequestException('Invitation already responded');
+    }
+
+    if (accept) {
+      invitation.status = JobInvitationStatus.ACCEPTED;
+      await this.invitationRepository.save(invitation);
+
+      // Create a pending application automatically
+      const app = this.applicationRepository.create({
+        jobId: invitation.jobId,
+        workerId: workerId,
+        status: ApplicationStatus.PENDING,
+        coverLetter: 'Accepted invitation',
+      });
+      await this.applicationRepository.save(app);
+
+      await this.notificationHelper.send(
+        invitation.employerId,
+        NotificationType.JOB_APPLICATION_RECEIVED,
+        invitation.jobId,
+        { jobTitle: invitation.job.title, message: 'A worker has accepted your job invitation and applied.' }
+      );
+
+      return { invitation, application: app };
+    } else {
+      invitation.status = JobInvitationStatus.DECLINED;
+      await this.invitationRepository.save(invitation);
+      return { invitation };
+    }
+  }
+
+  async getMyInvitations(workerId: string): Promise<JobInvitation[]> {
+    return this.invitationRepository.find({
+      where: { workerId },
+      relations: ['job', 'employer'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  // ==================== JOB CRUD ====================
 
   async findJobs(
     filter: JobFilterDto,

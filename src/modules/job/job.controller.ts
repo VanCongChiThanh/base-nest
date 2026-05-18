@@ -113,6 +113,31 @@ export class JobController {
     return this.jobService.rejectApplication(id, user.id);
   }
 
+  // ==================== INVITATIONS ====================
+
+  @Post('jobs/:id/invite')
+  async inviteWorkerToJob(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+    @Body('workerId') workerId: string,
+  ) {
+    return this.jobService.inviteWorkerToJob(user.id, id, workerId);
+  }
+
+  @Post('invitations/:id/respond')
+  async respondToInvitation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+    @Body('accept') accept: boolean,
+  ) {
+    return this.jobService.respondToInvitation(user.id, id, accept);
+  }
+
+  @Get('invitations/my-invitations')
+  async getMyInvitations(@CurrentUser() user: User) {
+    return this.jobService.getMyInvitations(user.id);
+  }
+
   // ==================== PROGRESS APIs ====================
 
   @Get('applications/:id/progress')
