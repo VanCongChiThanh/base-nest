@@ -47,7 +47,17 @@ export class WorkerServiceService {
     } = query;
 
     const qb = this.workerServiceRepo.createQueryBuilder('ws')
-      .leftJoinAndSelect('ws.worker', 'worker')
+      .leftJoin('ws.worker', 'worker')
+      .addSelect([
+        'worker.id',
+        'worker.firstName',
+        'worker.lastName',
+        'worker.avatarUrl',
+        'worker.role',
+        'worker.email',
+        'worker.isEmailVerified',
+        'worker.verificationLevel',
+      ])
       .leftJoinAndSelect('ws.category', 'category')
       .where('ws.isActive = :isActive', { isActive: true });
 
@@ -70,10 +80,22 @@ export class WorkerServiceService {
   }
 
   async findOne(id: string) {
-    const service = await this.workerServiceRepo.findOne({
-      where: { id },
-      relations: ['worker', 'category'],
-    });
+    const service = await this.workerServiceRepo.createQueryBuilder('ws')
+      .leftJoin('ws.worker', 'worker')
+      .addSelect([
+        'worker.id',
+        'worker.firstName',
+        'worker.lastName',
+        'worker.avatarUrl',
+        'worker.role',
+        'worker.email',
+        'worker.isEmailVerified',
+        'worker.verificationLevel',
+      ])
+      .leftJoinAndSelect('ws.category', 'category')
+      .where('ws.id = :id', { id })
+      .getOne();
+
     if (!service) throw new NotFoundException(WORKER_SERVICE_ERRORS.WORKER_SERVICE_NOT_FOUND);
     return service;
   }
