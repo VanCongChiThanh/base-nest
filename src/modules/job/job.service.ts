@@ -107,6 +107,36 @@ export class JobService {
     return fullJob;
   }
 
+  async createDirectHire(employerId: string, targetWorkerId: string, dto: Partial<CreateJobDto>): Promise<Job> {
+    const job = this.jobRepository.create({
+      ...dto,
+      employerId,
+      isDirectHire: true,
+      targetWorkerId,
+      status: JobStatus.OPEN, // Auto open
+    });
+    const saved = await this.jobRepository.save(job);
+
+    // Create an application automatically for the target worker
+    const application = this.applicationRepository.create({
+      jobId: saved.id,
+      workerId: targetWorkerId,
+      status: ApplicationStatus.PENDING, // Pending worker's acceptance
+      coverLetter: 'Direct hire request from employer',
+    });
+    await this.applicationRepository.save(application);
+
+    // Notify the worker
+    await this.notificationHelper.send(
+      targetWorkerId,
+      NotificationType.JOB_APPLICATION_RECEIVED, // Or a specific DIRECT_HIRE_REQUEST type if added
+      saved.id,
+      { jobTitle: saved.title, message: 'You have received a direct hire request!' }
+    );
+
+    return this.findJobById(saved.id);
+  }
+
   async findJobs(
     filter: JobFilterDto,
   ): Promise<{ data: Job[]; total: number; page: number; limit: number }> {

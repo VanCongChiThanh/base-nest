@@ -43,8 +43,8 @@ Unlike traditional RAG, GigWork implements a **Hybrid GraphRAG** architecture:
 - **Database:** PostgreSQL + TypeORM + **pgvector**
 - **AI Stack:** Google Gemini Pro, Text Embeddings, GraphRAG logic
 - **Background Tasks:** BullMQ + Redis
-- **Cloud Storage:** AWS S3 (Presigned URLs)
-- **Real-time:** Socket.io & Firebase Realtime DB
+- **Cloud Storage:** Cloudinary
+- **Real-time:** SSE & Socket.io
 
 ---
 

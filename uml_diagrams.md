@@ -183,3 +183,89 @@ repeat while (Thanh toán thành công?) is (Thất bại)
 stop
 @enduml
 ```
+
+### 3.3. Sơ đồ hoạt động: Quy trình Thanh toán Mua Gói Dịch Vụ (Subscription Checkout)
+*Mô tả cách thức người dùng nâng cấp gói cước và quá trình hệ thống nhận Webhook (IPN) từ cổng thanh toán để tự động cấp quyền.*
+
+```plantuml
+@startuml
+|Người dùng|
+start
+:Chọn Gói dịch vụ (Pro/VIP);
+:Bấm Thanh toán;
+
+|Hệ thống|
+:Khởi tạo Giao dịch (Transaction);
+:Gọi API Cổng thanh toán (VNPAY/MoMo);
+:Trả về URL Thanh toán;
+
+|Người dùng|
+:Chuyển hướng đến Cổng thanh toán;
+:Thực hiện quét mã QR / Nhập thẻ;
+
+|Cổng Thanh Toán|
+if (Giao dịch?) then (Thành công)
+  :Gửi Webhook (IPN) báo thành công;
+  
+  |Hệ thống|
+  :Xác thực chữ ký Webhook;
+  :Cập nhật trạng thái Giao dịch (SUCCESS);
+  :Cộng hạn mức đăng bài & Mở khóa AI;
+  :Gửi Email xác nhận;
+else (Thất bại / Hủy)
+  |Cổng Thanh Toán|
+  :Gửi Webhook thất bại (hoặc user hủy);
+  
+  |Hệ thống|
+  :Cập nhật trạng thái (FAILED);
+endif
+
+|Người dùng|
+:Nhận kết quả giao dịch trên màn hình;
+stop
+@enduml
+```
+
+### 3.4. Sơ đồ hoạt động: Quy trình Rút Tiền từ Ví (Withdrawal Request)
+*Dành cho nền tảng Freelance: Ứng viên sau khi hoàn thành công việc sẽ có số dư trong ví, yêu cầu rút tiền và chờ Admin duyệt đối soát.*
+
+```plantuml
+@startuml
+|Người dùng (Ứng viên)|
+start
+:Truy cập Ví cá nhân;
+:Nhập số tiền cần rút & Số tài khoản;
+:Gửi Yêu cầu Rút tiền;
+
+|Hệ thống|
+:Kiểm tra Số dư khả dụng;
+if (Số dư đủ?) then (Không đủ)
+  :Báo lỗi Số dư không hợp lệ;
+  stop
+else (Đủ)
+  :Trừ trực tiếp Số dư khả dụng;
+  :Tạo Lịch sử Rút tiền (Trạng thái: PENDING);
+  
+  |Admin|
+  :Nhận thông báo có Yêu cầu Rút tiền mới;
+  :Kiểm tra chống gian lận & Đối soát;
+  if (Quyết định duyệt?) then (Từ chối)
+    |Hệ thống|
+    :Hoàn lại tiền vào Ví cho Ứng viên;
+    :Cập nhật trạng thái (REJECTED);
+    :Gửi Email thông báo lý do từ chối;
+  else (Chấp nhận)
+    |Admin|
+    :Chuyển khoản thực tế qua Ngân hàng;
+    
+    |Hệ thống|
+    :Cập nhật trạng thái Yêu cầu (COMPLETED);
+    :Gửi Email thông báo rút tiền thành công;
+  endif
+endif
+
+|Người dùng (Ứng viên)|
+:Nhận thông báo và kiểm tra tài khoản Ngân hàng;
+stop
+@enduml
+```

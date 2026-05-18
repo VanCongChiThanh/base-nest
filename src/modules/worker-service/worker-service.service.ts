@@ -4,7 +4,8 @@ import { Repository } from 'typeorm';
 import { WorkerServiceEntity } from './entities/worker-service.entity';
 import { CreateWorkerServiceDto, UpdateWorkerServiceDto, WorkerServiceQueryDto } from './dto';
 
-import { AiSyncCronService } from '../ai/ai-sync-cron.service';
+import { DirectHireDto } from './dto';
+import { JobService } from '../job/job.service';
 
 @Injectable()
 export class WorkerServiceService {
@@ -12,6 +13,7 @@ export class WorkerServiceService {
     @InjectRepository(WorkerServiceEntity)
     private readonly workerServiceRepo: Repository<WorkerServiceEntity>,
     private readonly aiSyncCronService: AiSyncCronService,
+    private readonly jobService: JobService,
   ) {}
 
   async create(workerId: string, dto: CreateWorkerServiceDto) {
@@ -98,5 +100,16 @@ export class WorkerServiceService {
     // Even if removed, we sync so GraphRagService can deactivate the node
     this.aiSyncCronService.enqueueWorkerServiceSync(id).catch(console.warn);
     return removed;
+  }
+
+  async hireDirectly(employerId: string, serviceId: string, dto: DirectHireDto) {
+    const service = await this.findOne(serviceId);
+    if (service.workerId === employerId) {
+      throw new ForbiddenException('You cannot hire yourself');
+    }
+    return this.jobService.createDirectHire(employerId, service.workerId, {
+      ...dto,
+      categoryId: service.categoryId,
+    });
   }
 }

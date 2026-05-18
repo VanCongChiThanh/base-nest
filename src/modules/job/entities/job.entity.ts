@@ -200,4 +200,14 @@ export class Job {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  // ──────────────────────────────────────────
+  // DIRECT HIRE fields
+  // ──────────────────────────────────────────
+
+  @Column({ name: 'is_direct_hire', default: false })
+  isDirectHire: boolean;
+
+  @Column({ name: 'target_worker_id', nullable: true })
+  targetWorkerId: string;
 }
