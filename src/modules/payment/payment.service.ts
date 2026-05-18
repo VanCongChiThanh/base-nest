@@ -19,6 +19,7 @@ import {
   DisputeStatus,
   AssignmentStatus,
   NotificationType,
+  JobStatus,
 } from '../../common/enums';
 import { NotificationHelper } from '../notification';
 
@@ -40,25 +41,42 @@ export class PaymentService {
 
   async confirmFinalPayment(
     jobId: string,
-    workerId: string,
+    userId: string,
     dto: ConfirmPaymentDto,
   ): Promise<PaymentConfirmation> {
     const job = await this.jobRepo.findOne({ where: { id: jobId } });
     if (!job) throw new NotFoundException(JOB_ERRORS.JOB_NOT_FOUND);
 
-    // Verify worker is assigned
-    const assignment = await this.assignmentRepo.findOne({
-      where: { jobId, workerId, status: AssignmentStatus.COMPLETED },
-    });
-    if (!assignment) {
-      throw new BadRequestException(PAYMENT_ERRORS.PAYMENT_JOB_NOT_COMPLETED);
+    const isEmployer = job.employerId === userId;
+    let workerId = '';
+
+    if (isEmployer) {
+      // Find the assigned worker
+      const assignment = await this.assignmentRepo.findOne({
+        where: { jobId, status: AssignmentStatus.COMPLETED },
+      });
+      if (!assignment) throw new BadRequestException(PAYMENT_ERRORS.PAYMENT_JOB_NOT_COMPLETED);
+      workerId = assignment.workerId;
+    } else {
+      workerId = userId;
+      // Verify worker is assigned
+      const assignment = await this.assignmentRepo.findOne({
+        where: { jobId, workerId, status: AssignmentStatus.COMPLETED },
+      });
+      if (!assignment) {
+        throw new BadRequestException(PAYMENT_ERRORS.PAYMENT_JOB_NOT_COMPLETED);
+      }
     }
 
-    // Check if already confirmed
+    // Find existing payment
     const existing = await this.paymentRepo.findOne({
       where: { jobId, workerId, type: PaymentType.FINAL_PAYMENT },
     });
-    if (existing?.confirmedByWorker) {
+
+    if (isEmployer && existing?.confirmedByEmployer) {
+      throw new ConflictException(PAYMENT_ERRORS.PAYMENT_ALREADY_CONFIRMED);
+    }
+    if (!isEmployer && existing?.confirmedByWorker) {
       throw new ConflictException(PAYMENT_ERRORS.PAYMENT_ALREADY_CONFIRMED);
     }
 
@@ -71,16 +89,32 @@ export class PaymentService {
         type: PaymentType.FINAL_PAYMENT,
       });
 
-    payment.confirmedByWorker = true;
-    payment.confirmedAt = new Date();
-    payment.status = PaymentStatus.PAYMENT_CONFIRMED;
-    payment.note = dto.note ?? '';
+    if (isEmployer) {
+      payment.confirmedByEmployer = true;
+    } else {
+      payment.confirmedByWorker = true;
+      payment.confirmedAt = new Date();
+    }
+    
+    if (dto.note) {
+      payment.note = payment.note ? `${payment.note}\n${dto.note}` : dto.note;
+    }
+
+    // Check if both confirmed
+    if (payment.confirmedByWorker && payment.confirmedByEmployer) {
+      payment.status = PaymentStatus.PAYMENT_CONFIRMED;
+      // Also update job to SETTLED
+      await this.jobRepo.update({ id: jobId }, { status: JobStatus.SETTLED as any });
+    } else {
+      payment.status = PaymentStatus.PENDING; // Still pending until both confirm
+    }
 
     const saved = await this.paymentRepo.save(payment);
 
-    // Notify employer
+    // Notify the other party
+    const notifyUserId = isEmployer ? workerId : job.employerId;
     await this.notificationHelper.send(
-      job.employerId,
+      notifyUserId,
       NotificationType.PAYMENT_CONFIRMED,
       jobId,
       { jobTitle: job.title },

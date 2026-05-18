@@ -8,6 +8,7 @@ import {
   MilestoneStatus,
   NotificationType,
   JobType,
+  JobStatus,
 } from '../../common/enums';
 import payosConfig from '../../config/payos.config';
 import { Job, JobAssignment } from '../job/entities';
@@ -397,6 +398,10 @@ export class EscrowService {
     );
     escrow.status = allReleased ? EscrowStatus.FULLY_RELEASED : EscrowStatus.PARTIALLY_RELEASED;
     await this.escrowRepo.save(escrow);
+
+    if (allReleased) {
+      await this.jobRepo.update({ id: escrow.jobId }, { status: JobStatus.SETTLED as any });
+    }
 
     // Notify worker
     if (milestone.workerId) {

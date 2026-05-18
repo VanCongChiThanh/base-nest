@@ -60,6 +60,9 @@ export class PaymentConfirmation {
   @Column({ name: 'confirmed_by_worker', default: false })
   confirmedByWorker: boolean;
 
+  @Column({ name: 'confirmed_by_employer', default: false })
+  confirmedByEmployer: boolean;
+
   @Column({ name: 'confirmed_at', type: 'timestamptz', nullable: true })
   confirmedAt: Date;
 

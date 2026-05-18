@@ -214,9 +214,18 @@ export class JobController {
     return this.jobService.checkInJob(jobId, user.id, dto);
   }
 
-  /** Worker mark job as complete (must be IN_PROGRESS) */
+  /** Employer mark job as complete */
   @Post('jobs/:jobId/complete')
   async completeJob(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.jobService.completeJobByEmployer(jobId, user.id);
+  }
+
+  /** Worker mark assignment as complete */
+  @Post('jobs/:jobId/complete-assignment')
+  async completeAssignment(
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @CurrentUser() user: User,
   ) {

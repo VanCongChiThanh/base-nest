@@ -741,6 +741,23 @@ export class JobService {
     return saved;
   }
 
+  async completeJobByEmployer(jobId: string, employerId: string): Promise<Job> {
+    const job = await this.findJobById(jobId);
+    if (job.employerId !== employerId) {
+      throw new ForbiddenException('Only the employer can complete the job');
+    }
+
+    if (job.status !== JobStatus.OPEN) {
+      throw new BadRequestException('Job is not open');
+    }
+
+    // Set job to COMPLETED
+    job.status = JobStatus.COMPLETED as any;
+    await this.jobRepository.save(job);
+
+    return this.findJobById(jobId);
+  }
+
   // ==================== PROGRESS APIs ====================
 
   async getApplicationProgress(
