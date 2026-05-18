@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { WorkerServiceEntity } from './entities/worker-service.entity';
@@ -6,6 +6,12 @@ import { CreateWorkerServiceDto, UpdateWorkerServiceDto, WorkerServiceQueryDto }
 
 import { DirectHireDto } from './dto';
 import { JobService } from '../job/job.service';
+import { AiSyncCronService } from '../ai/ai-sync-cron.service';
+import {
+  ForbiddenException,
+  NotFoundException,
+  WORKER_SERVICE_ERRORS,
+} from '../../common';
 
 @Injectable()
 export class WorkerServiceService {
@@ -68,7 +74,7 @@ export class WorkerServiceService {
       where: { id },
       relations: ['worker', 'category'],
     });
-    if (!service) throw new NotFoundException('Service not found');
+    if (!service) throw new NotFoundException(WORKER_SERVICE_ERRORS.WORKER_SERVICE_NOT_FOUND);
     return service;
   }
 
@@ -83,7 +89,7 @@ export class WorkerServiceService {
   async update(id: string, workerId: string, dto: UpdateWorkerServiceDto) {
     const service = await this.findOne(id);
     if (service.workerId !== workerId) {
-      throw new ForbiddenException('You can only update your own service');
+      throw new ForbiddenException(WORKER_SERVICE_ERRORS.WORKER_SERVICE_UPDATE_FORBIDDEN);
     }
     Object.assign(service, dto);
     const saved = await this.workerServiceRepo.save(service);
@@ -94,7 +100,7 @@ export class WorkerServiceService {
   async remove(id: string, workerId: string) {
     const service = await this.findOne(id);
     if (service.workerId !== workerId) {
-      throw new ForbiddenException('You can only delete your own service');
+      throw new ForbiddenException(WORKER_SERVICE_ERRORS.WORKER_SERVICE_DELETE_FORBIDDEN);
     }
     const removed = await this.workerServiceRepo.remove(service);
     // Even if removed, we sync so GraphRagService can deactivate the node
@@ -105,7 +111,7 @@ export class WorkerServiceService {
   async hireDirectly(employerId: string, serviceId: string, dto: DirectHireDto) {
     const service = await this.findOne(serviceId);
     if (service.workerId === employerId) {
-      throw new ForbiddenException('You cannot hire yourself');
+      throw new ForbiddenException(WORKER_SERVICE_ERRORS.WORKER_SERVICE_SELF_HIRE);
     }
     return this.jobService.createDirectHire(employerId, service.workerId, {
       ...dto,

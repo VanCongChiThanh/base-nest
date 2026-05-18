@@ -145,11 +145,11 @@ export class JobService {
   async inviteWorkerToJob(employerId: string, jobId: string, workerId: string): Promise<JobInvitation> {
     const job = await this.findJobById(jobId);
     if (job.employerId !== employerId) {
-      throw new ForbiddenException('You can only invite workers to your own jobs');
+      throw new ForbiddenException(JOB_ERRORS.JOB_INVITE_OWNER_ONLY);
     }
 
     if (job.status !== JobStatus.OPEN) {
-      throw new BadRequestException('Job is not open');
+      throw new BadRequestException(JOB_ERRORS.JOB_NOT_OPEN);
     }
 
     // Check if invitation already exists
@@ -158,7 +158,7 @@ export class JobService {
     });
 
     if (existingInv) {
-      throw new ConflictException('Worker already invited to this job');
+      throw new ConflictException(JOB_ERRORS.JOB_WORKER_ALREADY_INVITED);
     }
 
     // Check if worker already applied
@@ -167,7 +167,7 @@ export class JobService {
     });
 
     if (existingApp) {
-      throw new ConflictException('Worker has already applied for this job');
+      throw new ConflictException(APPLICATION_ERRORS.APPLICATION_ALREADY_APPLIED);
     }
 
     const invitation = this.invitationRepository.create({
@@ -195,10 +195,10 @@ export class JobService {
       relations: ['job'],
     });
 
-    if (!invitation) throw new NotFoundException('Invitation not found');
-    if (invitation.workerId !== workerId) throw new ForbiddenException('Not your invitation');
+    if (!invitation) throw new NotFoundException(JOB_ERRORS.JOB_INVITATION_NOT_FOUND);
+    if (invitation.workerId !== workerId) throw new ForbiddenException(JOB_ERRORS.JOB_INVITATION_FORBIDDEN);
     if (invitation.status !== JobInvitationStatus.PENDING) {
-      throw new BadRequestException('Invitation already responded');
+      throw new BadRequestException(JOB_ERRORS.JOB_INVITATION_ALREADY_RESPONDED);
     }
 
     if (accept) {
@@ -671,10 +671,7 @@ export class JobService {
       throw new NotFoundException(APPLICATION_ERRORS.APPLICATION_NOT_FOUND);
     }
     if (assignment.job.jobType && assignment.job.jobType !== JobType.GIG) {
-      throw new BadRequestException({
-        code: 'CHECK_IN_ONLY_GIG',
-        message: 'Check-in only applies to GIG jobs',
-      });
+      throw new BadRequestException(JOB_ERRORS.JOB_CHECK_IN_ONLY_GIG);
     }
     if (assignment.status !== AssignmentStatus.ASSIGNED) {
       throw new BadRequestException(
@@ -744,11 +741,11 @@ export class JobService {
   async completeJobByEmployer(jobId: string, employerId: string): Promise<Job> {
     const job = await this.findJobById(jobId);
     if (job.employerId !== employerId) {
-      throw new ForbiddenException('Only the employer can complete the job');
+      throw new ForbiddenException(JOB_ERRORS.JOB_COMPLETE_EMPLOYER_ONLY);
     }
 
     if (job.status !== JobStatus.OPEN) {
-      throw new BadRequestException('Job is not open');
+      throw new BadRequestException(JOB_ERRORS.JOB_NOT_OPEN);
     }
 
     // Set job to COMPLETED

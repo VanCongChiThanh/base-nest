@@ -16,6 +16,7 @@ import {
   JobType,
   OnlinePaymentType,
   ExperienceLevel,
+  PaymentMethod,
 } from '../../../common/enums';
 import { JobSkill } from './job-skill.entity';
 import { JobApplication } from './job-application.entity';
@@ -59,6 +60,14 @@ export class Job {
     default: JobStatus.OPEN,
   })
   status: JobStatus;
+
+  @Column({
+    name: 'payment_method',
+    type: 'enum',
+    enum: PaymentMethod,
+    default: PaymentMethod.P2P,
+  })
+  paymentMethod: PaymentMethod;
 
   // ──────────────────────────────────────────
   // GIG / PART_TIME fields

@@ -16,6 +16,7 @@ import {
   JobType,
   OnlinePaymentType,
   ExperienceLevel,
+  PaymentMethod,
 } from '../../../common/enums';
 
 export class CreateJobDto {
@@ -40,6 +41,10 @@ export class CreateJobDto {
   @IsOptional()
   @IsEnum(JobType)
   jobType?: JobType;
+
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
 
   // ── GIG / PART_TIME only ──────────────────
   /** Required for GIG/PART_TIME. Not used for ONLINE. */

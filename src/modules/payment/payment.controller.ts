@@ -49,6 +49,14 @@ export class PaymentController {
     return this.paymentService.getPaymentsByJob(jobId, user.id);
   }
 
+  @Get('jobs/:jobId/p2p-info')
+  async getP2PInfo(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.paymentService.getP2PPaymentInfo(jobId, user.id);
+  }
+
   @Get('worker/payments')
   async getMyPayments(
     @CurrentUser() user: User,

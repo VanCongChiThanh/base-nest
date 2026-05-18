@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { PaymentConfirmation, Dispute } from './entities';
 import { ConfirmPaymentDto, CreateDisputeDto, ResolveDisputeDto } from './dto';
 import { Job, JobAssignment } from '../job/entities';
+import { BankAccount } from '../user/entities';
 import {
   PAYMENT_ERRORS,
   DISPUTE_ERRORS,
@@ -20,6 +21,7 @@ import {
   AssignmentStatus,
   NotificationType,
   JobStatus,
+  PaymentMethod,
 } from '../../common/enums';
 import { NotificationHelper } from '../notification';
 
@@ -34,6 +36,8 @@ export class PaymentService {
     private readonly jobRepo: Repository<Job>,
     @InjectRepository(JobAssignment)
     private readonly assignmentRepo: Repository<JobAssignment>,
+    @InjectRepository(BankAccount)
+    private readonly bankAccountRepo: Repository<BankAccount>,
     private readonly notificationHelper: NotificationHelper,
   ) {}
 
@@ -121,6 +125,39 @@ export class PaymentService {
     );
 
     return saved;
+  }
+
+  // ==================== P2P PAYMENT INFO ====================
+
+  /**
+   * GET /jobs/:jobId/p2p-info
+   * Returns bank accounts of the employer (or worker, depending on who pays)
+   * so the other party knows where to transfer.
+   */
+  async getP2PPaymentInfo(jobId: string, requestUserId: string) {
+    const job = await this.jobRepo.findOne({ where: { id: jobId } });
+    if (!job) throw new NotFoundException(JOB_ERRORS.JOB_NOT_FOUND);
+
+    if (job.paymentMethod !== PaymentMethod.P2P) {
+      throw new BadRequestException(PAYMENT_ERRORS.PAYMENT_NOT_P2P);
+    }
+
+    // The employer's bank accounts are shown to the worker (employer pays worker)
+    const isEmployer = job.employerId === requestUserId;
+
+    // If requester is employer, show their own accounts; if worker, show employer's
+    const targetUserId = job.employerId;
+    const bankAccounts = await this.bankAccountRepo.find({
+      where: { userId: targetUserId, isDefault: true },
+      order: { isDefault: 'DESC', createdAt: 'DESC' },
+    });
+
+    return {
+      jobId,
+      paymentMethod: job.paymentMethod,
+      bankAccounts,
+      isEmployer,
+    };
   }
 
   // ==================== GET PAYMENT STATUS ====================

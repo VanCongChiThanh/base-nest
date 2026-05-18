@@ -180,10 +180,7 @@ export class SubscriptionService {
   private getPayOSClient(): PayOS {
     if (!this.payosClient) {
       if (!this.payosConf.clientId || !this.payosConf.apiKey || !this.payosConf.checksumKey) {
-        throw new BadRequestException({
-          code: 'PAYMENT_CONFIG_ERROR',
-          message: 'PayOS credentials are not configured. Set PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY.',
-        });
+        throw new BadRequestException(SUBSCRIPTION_ERRORS.PAYMENT_CONFIG_ERROR);
       }
       this.payosClient = new PayOS({
         clientId: this.payosConf.clientId,
@@ -492,10 +489,7 @@ export class SubscriptionService {
       return { success: true };
     } catch (error) {
       this.logger.error('Webhook verification failed', error);
-      throw new BadRequestException({
-        code: 'SUBSCRIPTION_WEBHOOK_INVALID',
-        message: 'Invalid webhook signature',
-      });
+      throw new BadRequestException(SUBSCRIPTION_ERRORS.WEBHOOK_INVALID);
     }
   }
 
