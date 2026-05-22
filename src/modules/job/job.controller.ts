@@ -105,6 +105,15 @@ export class JobController {
     return this.jobService.acceptApplication(id, user.id);
   }
 
+  @Post('applications/:id/respond-acceptance')
+  async respondApplicationAcceptance(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+    @Body('accept') accept: boolean,
+  ) {
+    return this.jobService.respondApplicationAcceptance(id, user.id, accept);
+  }
+
   @Post('applications/:id/reject')
   async rejectApplication(
     @Param('id', ParseUUIDPipe) id: string,

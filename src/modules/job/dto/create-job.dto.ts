@@ -68,7 +68,8 @@ export class CreateJobDto {
   @IsDateString()
   startTime?: string;
 
-  @ValidateIf((o) => o.jobType !== JobType.ONLINE)
+  @IsOptional()
+  @ValidateIf((o) => o.jobType !== JobType.ONLINE && o.endTime != null && o.endTime !== '')
   @IsDateString()
   endTime?: string;
 
@@ -149,7 +150,8 @@ export class CreateJobDto {
   hourlyRateMax?: number;
 
   /** Deadline hoàn thành dự án (ONLINE) */
-  @ValidateIf((o) => o.jobType === JobType.ONLINE)
+  @IsOptional()
+  @ValidateIf((o) => o.jobType === JobType.ONLINE && o.deadline != null && o.deadline !== '')
   @IsDateString()
   deadline?: string;
 

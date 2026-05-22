@@ -260,7 +260,10 @@ export class JobService {
       .leftJoinAndSelect('job.category', 'category')
       .leftJoinAndSelect('job.jobSkills', 'jobSkills')
       .leftJoinAndSelect('jobSkills.skill', 'skill')
-      .where('job.status = :status', { status: JobStatus.OPEN });
+      .where('job.status = :status', { status: JobStatus.OPEN })
+      .andWhere('job.isDirectHire = false')
+      .andWhere('(job.endTime IS NULL OR job.endTime >= NOW())')
+      .andWhere('(job.deadline IS NULL OR job.deadline >= NOW())');
 
     if (provinceCode) {
       qb.andWhere('job.provinceCode = :provinceCode', { provinceCode });
@@ -444,6 +447,11 @@ export class JobService {
     if (job.employerId === workerId) {
       throw new BadRequestException(APPLICATION_ERRORS.APPLICATION_SELF_APPLY);
     }
+    if (job.isDirectHire && job.targetWorkerId !== workerId) {
+      throw new ForbiddenException(
+        APPLICATION_ERRORS.APPLICATION_ACCESS_FORBIDDEN,
+      );
+    }
 
     const existingApp = await this.applicationRepository.findOne({
       where: { jobId, workerId },
@@ -536,6 +544,70 @@ export class JobService {
       throw new BadRequestException(JOB_ERRORS.JOB_WORKERS_FULL);
     }
 
+    application.status = ApplicationStatus.EMPLOYER_ACCEPTED;
+    application.respondedAt = new Date();
+    const saved = await this.applicationRepository.save(application);
+
+    await this.notificationHelper.send(
+      application.workerId,
+      NotificationType.JOB_APPLICATION_ACCEPTED,
+      application.id,
+      {
+        jobTitle: application.job.title,
+        applicationId: application.id,
+        jobId: application.jobId,
+      },
+    );
+
+    return saved;
+  }
+
+  async respondApplicationAcceptance(
+    applicationId: string,
+    workerId: string,
+    accept: boolean,
+  ): Promise<JobApplication> {
+    const application = await this.applicationRepository.findOne({
+      where: { id: applicationId },
+      relations: ['job'],
+    });
+    if (!application) {
+      throw new NotFoundException(APPLICATION_ERRORS.APPLICATION_NOT_FOUND);
+    }
+    if (application.workerId !== workerId) {
+      throw new ForbiddenException(
+        APPLICATION_ERRORS.APPLICATION_ACCESS_FORBIDDEN,
+      );
+    }
+    if (application.status !== ApplicationStatus.EMPLOYER_ACCEPTED) {
+      throw new BadRequestException(APPLICATION_ERRORS.APPLICATION_NOT_PENDING);
+    }
+
+    if (!accept) {
+      application.status = ApplicationStatus.CANCELLED;
+      application.respondedAt = new Date();
+      const cancelled = await this.applicationRepository.save(application);
+
+      await this.notificationHelper.send(
+        application.job.employerId,
+        NotificationType.APPLICATION_CANCELLED,
+        application.jobId,
+        {
+          jobTitle: application.job.title,
+          applicationId,
+        },
+      );
+
+      return cancelled;
+    }
+
+    const acceptedCount = await this.applicationRepository.count({
+      where: { jobId: application.jobId, status: ApplicationStatus.ACCEPTED },
+    });
+    if (acceptedCount >= application.job.requiredWorkers) {
+      throw new BadRequestException(JOB_ERRORS.JOB_WORKERS_FULL);
+    }
+
     application.status = ApplicationStatus.ACCEPTED;
     application.respondedAt = new Date();
     const saved = await this.applicationRepository.save(application);
@@ -552,20 +624,12 @@ export class JobService {
         status: JobStatus.CLOSED,
       });
       this.aiSyncCronService.enqueueJobSync(application.jobId).catch((err) =>
-        console.warn('Failed to enqueue AI embedding for closed job:', err?.message),
+        console.warn(
+          'Failed to enqueue AI embedding for closed job:',
+          err?.message,
+        ),
       );
     }
-
-    await this.notificationHelper.send(
-      application.workerId,
-      NotificationType.JOB_APPLICATION_ACCEPTED,
-      application.id,
-      {
-        jobTitle: application.job.title,
-        applicationId: application.id,
-        jobId: application.jobId,
-      },
-    );
 
     return saved;
   }
