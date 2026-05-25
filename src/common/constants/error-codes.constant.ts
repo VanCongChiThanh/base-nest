@@ -492,6 +492,10 @@ export const PAYMENT_ERRORS = {
     code: 'PAYMENT_NOT_P2P',
     message: 'This job does not use P2P payment',
   },
+  PAYMENT_VIEW_FORBIDDEN: {
+    code: 'PAYMENT_VIEW_FORBIDDEN',
+    message: 'You are not allowed to view this payment information',
+  },
 } as const;
 
 // ==================== DISPUTE ====================
@@ -639,6 +643,10 @@ export const WORKER_SERVICE_ERRORS = {
   WORKER_SERVICE_SELF_HIRE: {
     code: 'WORKER_SERVICE_SELF_HIRE',
     message: 'You cannot hire yourself',
+  },
+  WORKER_SERVICE_LIMIT_REACHED: {
+    code: 'WORKER_SERVICE_LIMIT_REACHED',
+    message: 'Your current plan allows only a limited number of active service profiles',
   },
 } as const;
 

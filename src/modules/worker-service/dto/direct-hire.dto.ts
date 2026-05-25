@@ -6,7 +6,7 @@ import {
   IsDateString,
   IsEnum,
 } from 'class-validator';
-import { JobType } from '../../../common/enums';
+import { JobType, OnlinePaymentType } from '../../../common/enums';
 
 export class DirectHireDto {
   @IsNotEmpty()
@@ -52,4 +52,8 @@ export class DirectHireDto {
   @IsOptional()
   @IsDateString()
   deadline?: string;
+
+  @IsOptional()
+  @IsEnum(OnlinePaymentType)
+  onlinePaymentType?: OnlinePaymentType;
 }

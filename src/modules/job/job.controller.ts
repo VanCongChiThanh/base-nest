@@ -165,6 +165,11 @@ export class JobController {
     return this.applicationChatService.listMessages(id, user.id);
   }
 
+  @Get('applications/my-conversations')
+  async getMyConversations(@CurrentUser() user: User) {
+    return this.applicationChatService.listConversations(user.id);
+  }
+
   @Post('applications/:id/messages')
   @RequireFeature({ key: 'chat.enabled' })
   async postApplicationMessage(

@@ -1,4 +1,5 @@
 import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateBankAccountDto {
   @IsString()
@@ -14,6 +15,7 @@ export class CreateBankAccountDto {
   accountName: string;
 
   @IsOptional()
+  @Transform(({ value }) => (value === '' ? undefined : value))
   @IsUrl()
   qrCodeUrl?: string;
 
@@ -36,6 +38,7 @@ export class UpdateBankAccountDto {
   accountName?: string;
 
   @IsOptional()
+  @Transform(({ value }) => (value === '' ? undefined : value))
   @IsUrl()
   qrCodeUrl?: string;
 

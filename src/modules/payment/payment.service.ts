@@ -131,8 +131,10 @@ export class PaymentService {
 
   /**
    * GET /jobs/:jobId/p2p-info
-   * Returns bank accounts of the employer (or worker, depending on who pays)
-   * so the other party knows where to transfer.
+   * Returns bank accounts of the payment receiver (worker).
+   * Business rule:
+   * - P2P jobs: employer pays worker directly.
+   * - Therefore the transfer destination must always be worker bank accounts.
    */
   async getP2PPaymentInfo(jobId: string, requestUserId: string) {
     const job = await this.jobRepo.findOne({ where: { id: jobId } });
@@ -142,11 +144,38 @@ export class PaymentService {
       throw new BadRequestException(PAYMENT_ERRORS.PAYMENT_NOT_P2P);
     }
 
-    // The employer's bank accounts are shown to the worker (employer pays worker)
+    // Only participants can view payment destination info
     const isEmployer = job.employerId === requestUserId;
+    const targetWorkerId =
+      job.targetWorkerId ||
+      (
+        await this.assignmentRepo.findOne({
+          where: { jobId },
+          order: { createdAt: 'DESC' },
+        })
+      )?.workerId ||
+      null;
+    const isTargetWorker = targetWorkerId === requestUserId;
+    if (!isEmployer && !isTargetWorker) {
+      const assignment = await this.assignmentRepo.findOne({
+        where: { jobId, workerId: requestUserId },
+      });
+      if (!assignment) {
+        throw new ForbiddenException(PAYMENT_ERRORS.PAYMENT_VIEW_FORBIDDEN);
+      }
+    }
 
-    // If requester is employer, show their own accounts; if worker, show employer's
-    const targetUserId = job.employerId;
+    if (!targetWorkerId) {
+      return {
+        jobId,
+        paymentMethod: job.paymentMethod,
+        bankAccounts: [],
+        isEmployer,
+        receiverRole: 'WORKER',
+      };
+    }
+
+    const targetUserId = targetWorkerId;
     const bankAccounts = await this.bankAccountRepo.find({
       where: { userId: targetUserId, isDefault: true },
       order: { isDefault: 'DESC', createdAt: 'DESC' },
@@ -157,6 +186,7 @@ export class PaymentService {
       paymentMethod: job.paymentMethod,
       bankAccounts,
       isEmployer,
+      receiverRole: 'WORKER',
     };
   }
 

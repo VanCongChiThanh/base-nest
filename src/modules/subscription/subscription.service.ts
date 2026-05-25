@@ -71,6 +71,7 @@ const PLAN_SEEDS: PlanSeed[] = [
       'ai.job_chatbot.enabled': false,
       'ai.cv_screening.enabled': false,
       'ai.cv_screening.monthly_quota': 0,
+      'worker.service.active_limit': 1,
     },
   },
   {
@@ -91,6 +92,7 @@ const PLAN_SEEDS: PlanSeed[] = [
       'ai.cv_screening.enabled': true,
       'ai.cv_screening.monthly_quota': 50,
       'ai.interview_summary.enabled': true,
+      'worker.service.active_limit': 10,
     },
   },
   {
@@ -110,6 +112,7 @@ const PLAN_SEEDS: PlanSeed[] = [
       'job.post.unlimited': false,
       'ai.candidate_match.enabled': false,
       'organization.member_management.enabled': false,
+      'worker.service.active_limit': 1,
     },
   },
   {
@@ -129,6 +132,7 @@ const PLAN_SEEDS: PlanSeed[] = [
       'job.post.unlimited': true,
       'ai.candidate_match.enabled': true,
       'organization.member_management.enabled': true,
+      'worker.service.active_limit': 9999,
     },
   },
   {

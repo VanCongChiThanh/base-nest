@@ -7,22 +7,31 @@ import { CreateWorkerServiceDto, UpdateWorkerServiceDto, WorkerServiceQueryDto }
 import { DirectHireDto } from './dto';
 import { JobService } from '../job/job.service';
 import { AiSyncCronService } from '../ai/ai-sync-cron.service';
+import { SubscriptionService } from '../subscription';
+import { User } from '../user/entities';
 import {
+  BadRequestException,
   ForbiddenException,
   NotFoundException,
   WORKER_SERVICE_ERRORS,
 } from '../../common';
+import { JobType, OnlinePaymentType } from '../../common/enums';
 
 @Injectable()
 export class WorkerServiceService {
   constructor(
     @InjectRepository(WorkerServiceEntity)
     private readonly workerServiceRepo: Repository<WorkerServiceEntity>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly aiSyncCronService: AiSyncCronService,
     private readonly jobService: JobService,
+    private readonly subscriptionService: SubscriptionService,
   ) {}
 
   async create(workerId: string, dto: CreateWorkerServiceDto) {
+    await this.assertCanCreateWorkerService(workerId);
+
     const serviceNode = this.workerServiceRepo.create({
       ...dto,
       workerId,
@@ -135,9 +144,67 @@ export class WorkerServiceService {
     if (service.workerId === employerId) {
       throw new ForbiddenException(WORKER_SERVICE_ERRORS.WORKER_SERVICE_SELF_HIRE);
     }
-    return this.jobService.createDirectHire(employerId, service.workerId, {
-      ...dto,
-      categoryId: service.categoryId,
+
+    return this.jobService.createDirectHire(
+      employerId,
+      service.workerId,
+      this.buildDirectHirePayload(dto, service),
+    );
+  }
+
+  private async assertCanCreateWorkerService(workerId: string) {
+    const activeServiceCount = await this.workerServiceRepo.count({
+      where: { workerId, isActive: true },
     });
+    if (activeServiceCount === 0) return;
+
+    const user = await this.userRepo.findOne({ where: { id: workerId } });
+    if (!user) {
+      throw new NotFoundException(WORKER_SERVICE_ERRORS.WORKER_SERVICE_NOT_FOUND);
+    }
+
+    const entitlements = await this.subscriptionService.getEntitlementsForUser(user);
+    const limit = Number(entitlements.features?.['worker.service.active_limit'] ?? 1);
+
+    if (activeServiceCount >= limit) {
+      throw new BadRequestException(WORKER_SERVICE_ERRORS.WORKER_SERVICE_LIMIT_REACHED);
+    }
+  }
+
+  private buildDirectHirePayload(
+    dto: DirectHireDto,
+    service: WorkerServiceEntity,
+  ) {
+    const price = Number(dto.totalBudget ?? dto.salaryPerHour ?? service.price);
+    const isFixedPrice =
+      dto.onlinePaymentType === OnlinePaymentType.FIXED_PRICE ||
+      (dto.jobType === JobType.ONLINE && dto.totalBudget !== undefined);
+
+    // Direct hire has its own contract payload. Hourly/offline keeps schedule,
+    // fixed-price/online uses totalBudget and optional deadline.
+    if (isFixedPrice) {
+      return {
+        title: dto.title,
+        description: dto.description,
+        jobType: JobType.ONLINE,
+        onlinePaymentType: OnlinePaymentType.FIXED_PRICE,
+        totalBudget: price,
+        deadline: dto.deadline || dto.endTime,
+        categoryId: service.categoryId,
+      };
+    }
+
+    return {
+      title: dto.title,
+      description: dto.description,
+      jobType: dto.jobType,
+      salaryPerHour: price,
+      startTime: dto.startTime,
+      endTime: dto.endTime,
+      provinceCode: dto.provinceCode,
+      wardCode: dto.wardCode,
+      address: dto.address,
+      categoryId: service.categoryId,
+    };
   }
 }

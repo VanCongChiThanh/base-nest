@@ -22,7 +22,7 @@ export class ApplicationChatService {
     @InjectRepository(JobAssignment)
     private readonly assignmentRepository: Repository<JobAssignment>,
     @Inject(forwardRef(() => ApplicationChatGateway))
-    private readonly applicationChatGateway: ApplicationChatGateway,
+    private readonly applicationChatGateway: ApplicationChatGateway
   ) {}
 
   /** Worker or employer of this application may read messages. */
@@ -58,7 +58,12 @@ export class ApplicationChatService {
     application: JobApplication,
     assignment: JobAssignment | null,
   ): boolean {
-    if (application.status !== ApplicationStatus.ACCEPTED) return false;
+    if (
+      application.status !== ApplicationStatus.ACCEPTED &&
+      application.status !== ApplicationStatus.EMPLOYER_ACCEPTED
+    ) {
+      return false;
+    }
     
     // Đối với job ONLINE, luôn cho phép chat kể cả khi đã hoàn thành hoặc hủy
     if (application.job?.jobType === JobType.ONLINE) {
@@ -80,7 +85,8 @@ export class ApplicationChatService {
     // Để đơn giản, cứ là ONLINE và đã ACCEPTED thì cho phép (hoặc nếu yêu cầu luôn cho phép đọc)
     if (
       application.job?.jobType !== JobType.ONLINE &&
-      application.status !== ApplicationStatus.ACCEPTED
+      application.status !== ApplicationStatus.ACCEPTED &&
+      application.status !== ApplicationStatus.EMPLOYER_ACCEPTED
     ) {
       throw new ForbiddenException(APPLICATION_ERRORS.APPLICATION_CHAT_CLOSED);
     }
@@ -152,5 +158,66 @@ export class ApplicationChatService {
     }
 
     return { id: saved.id, createdAt: saved.createdAt };
+  }
+
+  async listConversations(userId: string) {
+    const applications = await this.applicationRepository
+      .createQueryBuilder('application')
+      .leftJoinAndSelect('application.job', 'job')
+      .leftJoinAndSelect('job.employer', 'employer')
+      .leftJoinAndSelect('application.worker', 'worker')
+      .where('application.workerId = :userId OR job.employerId = :userId', {
+        userId,
+      })
+      .andWhere('application.status IN (:...statuses)', {
+        statuses: [
+          ApplicationStatus.EMPLOYER_ACCEPTED,
+          ApplicationStatus.ACCEPTED,
+        ],
+      })
+      .orderBy('application.appliedAt', 'DESC')
+      .getMany();
+
+    const conversations = await Promise.all(
+      applications.map(async (application) => {
+        const lastMessage = await this.messageRepository.findOne({
+          where: { applicationId: application.id },
+          relations: ['sender'],
+          order: { createdAt: 'DESC' },
+        });
+
+        return {
+          applicationId: application.id,
+          applicationStatus: application.status,
+          jobId: application.jobId,
+          jobTitle: application.job?.title ?? 'Công việc',
+          isDirectHire: Boolean(application.job?.isDirectHire),
+          participant:
+            application.workerId === userId
+              ? application.job?.employer
+              : application.worker,
+          lastMessage: lastMessage
+            ? {
+                id: lastMessage.id,
+                body: lastMessage.body,
+                createdAt: lastMessage.createdAt,
+                senderId: lastMessage.senderId,
+                sender: {
+                  id: lastMessage.sender.id,
+                  firstName: lastMessage.sender.firstName,
+                  lastName: lastMessage.sender.lastName,
+                  avatarUrl: lastMessage.sender.avatarUrl,
+                },
+              }
+            : null,
+        };
+      }),
+    );
+
+    return conversations.sort((a, b) => {
+      const left = a.lastMessage?.createdAt ?? new Date(0);
+      const right = b.lastMessage?.createdAt ?? new Date(0);
+      return new Date(right).getTime() - new Date(left).getTime();
+    });
   }
 }

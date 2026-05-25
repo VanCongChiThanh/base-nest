@@ -5,9 +5,16 @@ import { WorkerServiceController } from './worker-service.controller';
 import { WorkerServiceEntity } from './entities';
 import { AiModule } from '../ai/ai.module';
 import { JobModule } from '../job/job.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
+import { User } from '../user/entities';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([WorkerServiceEntity]), AiModule, forwardRef(() => JobModule)],
+  imports: [
+    TypeOrmModule.forFeature([WorkerServiceEntity, User]),
+    AiModule,
+    forwardRef(() => JobModule),
+    SubscriptionModule,
+  ],
   controllers: [WorkerServiceController],
   providers: [WorkerServiceService],
   exports: [WorkerServiceService],
