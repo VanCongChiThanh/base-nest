@@ -7,6 +7,7 @@ import Redis from 'ioredis';
 import { GeminiService } from './gemini.service';
 import { GraphRagService, MetadataFilter } from './graph-rag.service';
 import { ChatSession, ChatMessage } from './entities';
+import { WorkerServiceEntity } from '../worker-service/entities/worker-service.entity';
 import { REDIS_CLIENT } from '../redis';
 import geminiConfig from '../../config/gemini.config';
 
@@ -369,8 +370,7 @@ export class AiChatbotService {
 
       const vectorStr = `[${embedding.join(',')}]`;
       const rows = await this.dataSource.query(
-        `SELECT source_id, title, content, owner_id, owner_name,
-                avg_rating, price_display, province_code, is_available
+        `SELECT source_id
          FROM graph_knowledge
          WHERE is_active = true
            AND embedding IS NOT NULL
@@ -381,8 +381,29 @@ export class AiChatbotService {
         [vectorStr],
       );
 
-      this.logger.debug(`[AI Search] found ${rows.length} candidates in graph_knowledge`);
-      return rows;
+      if (rows.length === 0) return [];
+
+      const ids = rows.map((r: any) => r.source_id.replace('worker_service_', ''));
+
+      const qb = this.dataSource.getRepository(WorkerServiceEntity).createQueryBuilder('ws')
+        .leftJoin('ws.worker', 'worker')
+        .addSelect([
+          'worker.id',
+          'worker.firstName',
+          'worker.lastName',
+          'worker.avatarUrl',
+          'worker.role',
+          'worker.email',
+          'worker.isEmailVerified',
+          'worker.verificationLevel',
+        ])
+        .leftJoinAndSelect('ws.category', 'category')
+        .where('ws.id IN (:...ids)', { ids });
+
+      const services = await qb.getMany();
+
+      this.logger.debug(`[AI Search] found ${services.length} candidates in database`);
+      return ids.map(id => services.find(s => s.id === id)).filter(Boolean);
     } catch (error) {
       this.logger.error('AI candidate search failed', error);
       return [];
