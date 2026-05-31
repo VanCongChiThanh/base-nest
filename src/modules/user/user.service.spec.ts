@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UserService } from './user.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { User, BankAccount } from './entities';
+import { ProfileService } from '../profile/profile.service';
 
 describe('UserService', () => {
   let service: UserService;
@@ -48,6 +49,7 @@ describe('UserService', () => {
         UserService,
         { provide: getRepositoryToken(User), useValue: mockRepo },
         { provide: getRepositoryToken(BankAccount), useValue: mockRepo },
+        { provide: ProfileService, useValue: { createEmployerProfile: jest.fn(), createWorkerProfile: jest.fn() } },
       ],
     }).compile();
 
