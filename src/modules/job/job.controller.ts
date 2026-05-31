@@ -17,6 +17,7 @@ import {
   CheckInJobDto,
   PostApplicationMessageDto,
 } from './dto';
+import { Role } from '../../common/enums';
 import {
   ConsumeQuota,
   CurrentUser,

@@ -34,7 +34,7 @@ export class Job {
   employer: User;
 
   @Column({ name: 'posted_by_id', nullable: true })
-  postedById: string;
+  postedById: string | null;
 
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'posted_by_id' })

@@ -147,6 +147,7 @@ export class WorkerServiceService {
 
     return this.jobService.createDirectHire(
       employerId,
+      null, // postedById
       service.workerId,
       this.buildDirectHirePayload(dto, service),
     );
