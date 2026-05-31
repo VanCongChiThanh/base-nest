@@ -9,6 +9,7 @@ import {
 import { Role, VerificationLevel } from '../../../common/enums';
 import { Exclude } from 'class-transformer';
 import { UserProvider } from '../../auth/entities';
+import { ManyToOne, JoinColumn } from 'typeorm';
 
 @Entity('users')
 export class User {
@@ -72,4 +73,14 @@ export class User {
   @Column({ name: 'reset_password_expires', nullable: true })
   @Exclude()
   resetPasswordExpires: Date;
+
+  @Column({ name: 'organization_id', nullable: true })
+  organizationId: string;
+
+  @ManyToOne(() => User, (user) => user.members)
+  @JoinColumn({ name: 'organization_id' })
+  organization: User;
+
+  @OneToMany(() => User, (user) => user.organization)
+  members: User[];
 }

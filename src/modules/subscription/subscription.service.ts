@@ -37,6 +37,7 @@ import {
   SUBSCRIPTION_ERRORS,
   USER_ERRORS,
 } from '../../common/constants/error-codes.constant';
+import { NotificationService } from '../notification/notification.service';
 import { EscrowService } from '../payment/escrow.service';
 
 type EntitlementValue = boolean | number | string | null;
@@ -179,6 +180,7 @@ export class SubscriptionService {
     private readonly paymentOrderRepository: Repository<PaymentOrder>,
     @Inject(forwardRef(() => EscrowService))
     private readonly escrowService: EscrowService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   private getPayOSClient(): PayOS {
@@ -247,7 +249,8 @@ export class SubscriptionService {
     await this.ensureSeededPlans();
 
     const roleToScope = this.getScopeByRole(user.role);
-    const currentPlan = await this.getCurrentPlanForUser(user.id, roleToScope);
+    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const currentPlan = await this.getCurrentPlanForUser(targetUserId, roleToScope);
 
     const featureConfig = {
       ...(currentPlan?.featureConfig || {}),
@@ -300,10 +303,12 @@ export class SubscriptionService {
     const periodType = quota.period || 'monthly';
     const amount = quota.amount || 1;
     const periodKey = this.buildPeriodKey(periodType);
+    
+    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
 
     let counter = await this.usageCounterRepository.findOne({
       where: {
-        userId: user.id,
+        userId: targetUserId,
         featureKey: quota.counterKey,
         periodKey,
       },
@@ -311,7 +316,7 @@ export class SubscriptionService {
 
     if (!counter) {
       counter = this.usageCounterRepository.create({
-        userId: user.id,
+        userId: targetUserId,
         featureKey: quota.counterKey,
         periodKey,
         count: 0,
@@ -463,7 +468,7 @@ export class SubscriptionService {
 
       if (!paymentOrder) {
         // Nếu không phải subscription payment, thử xem có phải escrow deposit không
-        const isEscrow = await this.escrowService.handleEscrowDeposit(webhookData.orderCode);
+        const isEscrow = await this.escrowService.handleEscrowDeposit(webhookData.orderCode, webhookData.amount);
         if (isEscrow) {
           return { success: true, message: 'Processed as escrow deposit' };
         }
@@ -474,6 +479,21 @@ export class SubscriptionService {
 
       if (paymentOrder.status === PaymentOrderStatus.PAID) {
         return { success: true, message: 'Already processed' };
+      }
+
+      if (webhookData.amount < paymentOrder.amount) {
+        this.logger.warn(`Underpayment detected for order ${paymentOrder.orderCode}. Expected: ${paymentOrder.amount}, Received: ${webhookData.amount}`);
+        
+        await this.notificationService.create({
+          userId: paymentOrder.userId,
+          type: 'SYSTEM' as any,
+          data: {
+            title: 'Giao dịch không hợp lệ',
+            message: `Hệ thống ghi nhận bạn đã thanh toán ${webhookData.amount}đ cho gói dịch vụ, tuy nhiên số tiền này chưa đủ (Yêu cầu: ${paymentOrder.amount}đ). Vui lòng liên hệ bộ phận hỗ trợ để được nâng cấp thủ công hoặc hoàn tiền. Mã giao dịch: ${paymentOrder.orderCode}.`,
+          },
+        });
+
+        return { success: true, message: 'Underpaid transaction ignored' };
       }
 
       paymentOrder.status = PaymentOrderStatus.PAID;
@@ -611,7 +631,7 @@ export class SubscriptionService {
   }
 
   private getScopeByRole(role: Role): PlanScope {
-    if (role === Role.ORGANIZATION) {
+    if (role === Role.ORGANIZATION || role === Role.RECRUITER) {
       return PlanScope.ORGANIZATION;
     }
 

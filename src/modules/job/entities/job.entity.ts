@@ -33,6 +33,13 @@ export class Job {
   @JoinColumn({ name: 'employer_id' })
   employer: User;
 
+  @Column({ name: 'posted_by_id', nullable: true })
+  postedById: string | null;
+
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'posted_by_id' })
+  postedBy: User;
+
   @Column({ name: 'category_id', nullable: true })
   categoryId: string;
 

@@ -18,6 +18,7 @@ import {
 } from './dto';
 import { CurrentUser } from '../../common/decorators';
 import { User } from '../user/entities';
+import { Role } from '../../common/enums';
 
 @Controller('profiles')
 export class ProfileController {
@@ -66,12 +67,14 @@ export class ProfileController {
     @CurrentUser() user: User,
     @Body() dto: CreateEmployerProfileDto,
   ) {
-    return this.profileService.createEmployerProfile(user.id, dto);
+    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.profileService.createEmployerProfile(targetUserId, dto);
   }
 
   @Get('employer/me')
   async getMyEmployerProfile(@CurrentUser() user: User) {
-    return this.profileService.getEmployerProfile(user.id);
+    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.profileService.getEmployerProfile(targetUserId);
   }
 
   @Patch('employer/me')
@@ -79,7 +82,8 @@ export class ProfileController {
     @CurrentUser() user: User,
     @Body() dto: UpdateEmployerProfileDto,
   ) {
-    return this.profileService.updateEmployerProfile(user.id, dto);
+    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.profileService.updateEmployerProfile(targetUserId, dto);
   }
 
   @Patch('employer/me/privacy')
@@ -87,7 +91,8 @@ export class ProfileController {
     @CurrentUser() user: User,
     @Body() dto: UpdateEmployerPrivacyDto,
   ) {
-    return this.profileService.updateEmployerPrivacySettings(user.id, dto);
+    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.profileService.updateEmployerPrivacySettings(targetUserId, dto);
   }
 
   @Get('employer/:id')
