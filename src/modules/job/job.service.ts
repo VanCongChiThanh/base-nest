@@ -676,6 +676,16 @@ export class JobService {
     });
     await this.assignmentRepository.save(assignment);
 
+    await this.notificationHelper.send(
+      application.job.employerId,
+      NotificationType.JOB_APPLICATION_ACCEPTED,
+      application.jobId,
+      {
+        jobTitle: application.job.title,
+        message: 'Ứng viên đã đồng ý nhận việc. Công việc hiện đã bắt đầu!',
+      },
+    );
+
     if (acceptedCount + 1 >= application.job.requiredWorkers) {
       await this.jobRepository.update(application.jobId, {
         status: JobStatus.CLOSED,
@@ -824,11 +834,14 @@ export class JobService {
     return saved;
   }
 
-  async completeJob(jobId: string, workerId: string): Promise<JobAssignment> {
-    const assignment = await this.assignmentRepository.findOne({
-      where: { jobId, workerId },
-      relations: ['job'],
-    });
+  async completeJob(jobId: string, userId: string): Promise<JobAssignment> {
+    const assignment = await this.assignmentRepository
+      .createQueryBuilder('assignment')
+      .leftJoinAndSelect('assignment.job', 'job')
+      .where('assignment.jobId = :jobId', { jobId })
+      .andWhere('(assignment.workerId = :userId OR job.employerId = :userId)', { userId })
+      .getOne();
+
     if (!assignment) {
       throw new NotFoundException(APPLICATION_ERRORS.APPLICATION_NOT_FOUND);
     }
@@ -842,25 +855,35 @@ export class JobService {
       );
     }
 
-    assignment.status = AssignmentStatus.COMPLETED;
-    assignment.completedAt = new Date();
+    const isEmployer = assignment.job.employerId === userId;
+
+    if (isEmployer) {
+      assignment.status = AssignmentStatus.PAYMENT_SENT;
+      await this.notificationHelper.send(
+        assignment.workerId,
+        NotificationType.JOB_COMPLETED,
+        jobId,
+        { 
+          jobTitle: assignment.job.title, 
+          message: 'Người thuê đã xác nhận hoàn thành công việc và thanh toán. Vui lòng xác nhận đã nhận đủ tiền.',
+          applicationId: assignment.applicationId
+        },
+      );
+    } else {
+      assignment.status = AssignmentStatus.PAYMENT_PENDING;
+      await this.notificationHelper.send(
+        assignment.job.employerId,
+        NotificationType.JOB_COMPLETED,
+        jobId,
+        { 
+          jobTitle: assignment.job.title, 
+          message: 'Người làm đã đánh dấu công việc hoàn thành. Vui lòng kiểm tra và xác nhận thanh toán.',
+          applicationId: assignment.applicationId
+        },
+      );
+    }
+
     const saved = await this.assignmentRepository.save(assignment);
-
-    // Increment totalJobsCompleted on worker profile
-    await this.workerProfileRepository
-      .createQueryBuilder()
-      .update(WorkerProfile)
-      .set({ totalJobsCompleted: () => 'total_jobs_completed + 1' })
-      .where('user_id = :workerId', { workerId })
-      .execute();
-
-    await this.notificationHelper.send(
-      assignment.job.employerId,
-      NotificationType.JOB_COMPLETED,
-      jobId,
-      { jobTitle: assignment.job.title },
-    );
-
     return saved;
   }
 
@@ -1348,6 +1371,14 @@ export class JobService {
     assignment.completedAt = new Date();
     await this.assignmentRepository.save(assignment);
 
+    // Increment totalJobsCompleted on worker profile
+    await this.workerProfileRepository
+      .createQueryBuilder()
+      .update(WorkerProfile)
+      .set({ totalJobsCompleted: () => 'total_jobs_completed + 1' })
+      .where('user_id = :workerId', { workerId: assignment.workerId })
+      .execute();
+
     assignment.job.status = JobStatus.COMPLETED as any;
     await this.jobRepository.save(assignment.job);
 
@@ -1357,7 +1388,8 @@ export class JobService {
       assignment.jobId,
       { 
         jobTitle: assignment.job.title,
-        message: `Người làm đã xác nhận nhận đủ thanh toán. Công việc "${assignment.job.title}" đã hoàn thành!`
+        message: `Người làm đã xác nhận nhận đủ thanh toán. Công việc "${assignment.job.title}" đã hoàn thành!`,
+        applicationId: assignment.applicationId
       }
     );
 
