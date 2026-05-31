@@ -280,15 +280,8 @@ export class SubscriptionService {
   async consumeQuota(user: User, quota: ConsumeQuotaConfig): Promise<void> {
     const entitlements = await this.getEntitlementsForUser(user);
 
-    if (quota.counterKey === 'job.post.count' && user.role === Role.USER) {
-      const isEkycVerified =
-        user.verificationLevel === VerificationLevel.BASIC ||
-        user.verificationLevel === VerificationLevel.BUSINESS;
-
-      if (!isEkycVerified) {
-        throw new ForbiddenException(SUBSCRIPTION_ERRORS.EKYC_REQUIRED);
-      }
-    }
+    // Cho phép user chưa eKYC đăng bài, bài sẽ không được ưu tiên hiển thị
+    // (logic ưu tiên nằm ở sortByTrustPriority trong job.service.ts)
 
     if (
       quota.counterKey === 'job.post.count' &&

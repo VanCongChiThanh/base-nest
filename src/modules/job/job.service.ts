@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException as NestBadRequestException, ForbiddenException as NestForbiddenException, NotFoundException as NestNotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Job, JobSkill, JobApplication, JobAssignment, JobInvitation } from './entities';
@@ -18,6 +18,9 @@ import {
   NotificationType,
   PrivacyVisibility,
   JobType,
+  JobSalaryType,
+  OnlinePaymentType,
+  VerificationLevel,
 } from '../../common/enums';
 import { JobInvitationStatus } from './entities/job-invitation.entity';
 import { NotificationHelper } from '../notification';
@@ -38,6 +41,10 @@ export interface ApplicationProgress {
   jobId: string;
   jobTitle: string;
   jobAddress: string;
+  jobType: JobType;
+  salaryType: JobSalaryType | null;
+  totalBudget: number | null;
+  onlinePaymentType: OnlinePaymentType | null;
   startTime: Date;
   endTime: Date;
   salaryPerHour: number;
@@ -52,6 +59,8 @@ export interface ApplicationProgress {
     checkedInAt: Date | null;
     completedAt: Date | null;
     notes: string | null;
+    loggedHours?: number | null;
+    hoursSubmittedBy?: string | null;
   } | null;
 }
 
@@ -124,7 +133,7 @@ export class JobService {
     const application = this.applicationRepository.create({
       jobId: saved.id,
       workerId: targetWorkerId,
-      status: ApplicationStatus.PENDING, // Pending worker's acceptance
+      status: ApplicationStatus.EMPLOYER_ACCEPTED, // Employer already approved the offer, pending worker's acceptance
       coverLetter: 'Direct hire request from employer',
     });
     await this.applicationRepository.save(application);
@@ -132,15 +141,55 @@ export class JobService {
     // Notify the worker
     await this.notificationHelper.send(
       targetWorkerId,
-      NotificationType.JOB_APPLICATION_RECEIVED, // Or a specific DIRECT_HIRE_REQUEST type if added
+      NotificationType.JOB_APPLICATION_RECEIVED,
       saved.id,
-      { jobTitle: saved.title, message: 'You have received a direct hire request!' }
+      { jobTitle: saved.title, message: 'Bạn có một yêu cầu Thuê ngay mới!', isDirectHire: true }
     );
 
     return this.findJobById(saved.id);
   }
 
   // ==================== INVITATIONS ====================
+
+  async negotiateDirectHirePrice(jobId: string, userId: string, proposedPrice: number): Promise<JobApplication> {
+    const job = await this.findJobById(jobId);
+    if (!job.isDirectHire) {
+      throw new NestBadRequestException('Chỉ có thể thương lượng giá cho yêu cầu Thuê ngay (Direct Hire)');
+    }
+
+    const application = await this.applicationRepository.findOne({ where: { jobId } });
+    if (!application) {
+      throw new NestNotFoundException('Không tìm thấy đơn ứng tuyển của yêu cầu này');
+    }
+
+    const isEmployer = job.employerId === userId;
+    const isWorker = application.workerId === userId;
+
+    if (!isEmployer && !isWorker) {
+      throw new NestForbiddenException('Bạn không có quyền thương lượng giá cho yêu cầu này');
+    }
+
+    if (application.status === ApplicationStatus.ACCEPTED) {
+      throw new NestBadRequestException('Hợp đồng đã được chấp nhận, không thể đổi giá');
+    }
+
+    // Update job price
+    if (job.onlinePaymentType === 'FIXED_PRICE') {
+      job.totalBudget = proposedPrice;
+    } else {
+      job.salaryPerHour = proposedPrice;
+    }
+    await this.jobRepository.save(job);
+
+    // Flip application status so the other party has to approve
+    if (isEmployer) {
+      application.status = ApplicationStatus.EMPLOYER_ACCEPTED; // Waiting for worker
+    } else {
+      application.status = ApplicationStatus.PENDING; // Waiting for employer
+    }
+    
+    return this.applicationRepository.save(application);
+  }
 
   async inviteWorkerToJob(employerId: string, jobId: string, workerId: string): Promise<JobInvitation> {
     const job = await this.findJobById(jobId);
@@ -381,11 +430,19 @@ export class JobService {
       [EmployerBadge.NONE]: 0,
     };
     jobs.sort((a, b) => {
+      // 1. Ưu tiên employer đã eKYC lên trước
+      const ekycA = (a.employer?.verificationLevel === VerificationLevel.BASIC || a.employer?.verificationLevel === VerificationLevel.BUSINESS) ? 1 : 0;
+      const ekycB = (b.employer?.verificationLevel === VerificationLevel.BASIC || b.employer?.verificationLevel === VerificationLevel.BUSINESS) ? 1 : 0;
+      if (ekycB !== ekycA) return ekycB - ekycA;
+
+      // 2. Ưu tiên tổ chức đã xác thực
       const pa = (a as any).employerProfile;
       const pb = (b as any).employerProfile;
       const verA = pa?.isVerifiedBusiness ? 1 : 0;
       const verB = pb?.isVerifiedBusiness ? 1 : 0;
       if (verB !== verA) return verB - verA;
+
+      // 3. Ưu tiên badge cao hơn
       const badgeA = badgeWeight[pa?.badge] ?? 0;
       const badgeB = badgeWeight[pb?.badge] ?? 0;
       return badgeB - badgeA;
@@ -688,13 +745,21 @@ export class JobService {
       throw new ForbiddenException(JOB_ERRORS.JOB_OWNER_FORBIDDEN);
     }
 
-    const [data, total] = await this.applicationRepository.findAndCount({
-      where: { jobId },
-      relations: ['worker'],
-      order: { appliedAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+    const [data, total] = await this.applicationRepository
+      .createQueryBuilder('app')
+      .leftJoinAndSelect('app.worker', 'worker')
+      .leftJoinAndMapOne(
+        'worker.workerProfile',
+        'WorkerProfile',
+        'workerProfile',
+        'workerProfile.userId = worker.id'
+      )
+      .where('app.jobId = :jobId', { jobId })
+      .orderBy('app.appliedAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
     return { data, total, page, limit };
   }
 
@@ -767,16 +832,13 @@ export class JobService {
     if (!assignment) {
       throw new NotFoundException(APPLICATION_ERRORS.APPLICATION_NOT_FOUND);
     }
-    const isGig = assignment.job.jobType === JobType.GIG || !assignment.job.jobType;
     const canComplete =
       assignment.status === AssignmentStatus.IN_PROGRESS ||
-      (!isGig && assignment.status === AssignmentStatus.ASSIGNED);
+      assignment.status === AssignmentStatus.ASSIGNED;
 
     if (!canComplete) {
       throw new BadRequestException(
-        !isGig
-          ? APPLICATION_ERRORS.ASSIGNMENT_MUST_BE_ASSIGNED
-          : APPLICATION_ERRORS.ASSIGNMENT_MUST_BE_IN_PROGRESS,
+        APPLICATION_ERRORS.ASSIGNMENT_MUST_BE_IN_PROGRESS,
       );
     }
 
@@ -808,7 +870,7 @@ export class JobService {
       throw new ForbiddenException(JOB_ERRORS.JOB_COMPLETE_EMPLOYER_ONLY);
     }
 
-    if (job.status !== JobStatus.OPEN) {
+    if (job.status !== JobStatus.OPEN && job.status !== JobStatus.CLOSED) {
       throw new BadRequestException(JOB_ERRORS.JOB_NOT_OPEN);
     }
 
@@ -904,6 +966,10 @@ export class JobService {
       jobId: application.jobId,
       jobTitle: application.job.title,
       jobAddress: application.job.address,
+      jobType: application.job.jobType,
+      salaryType: application.job.salaryType,
+      totalBudget: application.job.totalBudget,
+      onlinePaymentType: application.job.onlinePaymentType,
       startTime: application.job.startTime || application.job.deadline || application.job.createdAt,
       endTime: application.job.endTime || application.job.deadline || application.job.createdAt,
       salaryPerHour: application.job.salaryPerHour || 0,
@@ -919,6 +985,8 @@ export class JobService {
             checkedInAt: assignment.checkedInAt,
             completedAt: assignment.completedAt,
             notes: assignment.notes,
+            loggedHours: assignment.loggedHours,
+            hoursSubmittedBy: assignment.hoursSubmittedBy,
           }
         : null,
     };
@@ -1056,15 +1124,17 @@ export class JobService {
         ...baseSteps,
         {
           key: 'MILESTONES',
-          label: 'Thực hiện Milestones',
+          label: 'Thực hiện',
           status:
-            assignment?.status === AssignmentStatus.IN_PROGRESS
+            assignment?.status === AssignmentStatus.IN_PROGRESS ||
+            assignment?.status === AssignmentStatus.HOURS_SUBMITTED ||
+            assignment?.status === AssignmentStatus.PAYMENT_PENDING ||
+            assignment?.status === AssignmentStatus.PAYMENT_SENT ||
+            assignment?.status === AssignmentStatus.ASSIGNED
               ? 'active'
               : assignment?.status === AssignmentStatus.COMPLETED
                 ? 'done'
-                : assignment?.status === AssignmentStatus.ASSIGNED
-                  ? 'active'
-                  : 'pending',
+                : 'pending',
           timestamp: assignment?.startedAt ?? null,
         },
         {
@@ -1143,5 +1213,154 @@ export class JobService {
     // Otherwise, follow the standard privacy rules
     if (visibility === PrivacyVisibility.PUBLIC) return value;
     return null;
+  }
+
+  // ==================== HOURLY PAYMENT WORKFLOW ====================
+
+  async logHours(jobId: string, userId: string, loggedHours: number): Promise<JobAssignment> {
+    const assignment = await this.assignmentRepository.findOne({
+      where: { 
+        jobId, 
+        status: In([AssignmentStatus.IN_PROGRESS, AssignmentStatus.ASSIGNED]) 
+      },
+      relations: ['job'],
+    });
+
+    if (!assignment) {
+      throw new BadRequestException(APPLICATION_ERRORS.ASSIGNMENT_NOT_ACTIVE);
+    }
+
+    if (assignment.workerId !== userId && assignment.job.employerId !== userId) {
+      throw new ForbiddenException(APPLICATION_ERRORS.ASSIGNMENT_NOT_PARTICIPANT);
+    }
+
+    assignment.loggedHours = loggedHours;
+    assignment.hoursSubmittedBy = userId;
+    assignment.status = AssignmentStatus.HOURS_SUBMITTED;
+
+    await this.assignmentRepository.save(assignment);
+
+    // Notify the other party
+    const targetUserId = userId === assignment.workerId ? assignment.job.employerId : assignment.workerId;
+    await this.notificationHelper.send(
+      targetUserId,
+      NotificationType.JOB_COMPLETED,
+      assignment.jobId,
+      { 
+        jobTitle: assignment.job.title, 
+        message: `Số giờ thực tế đã làm cho công việc "${assignment.job.title}" là ${loggedHours} giờ. Vui lòng xác nhận.` 
+      }
+    );
+
+    return assignment;
+  }
+
+  async confirmHours(jobId: string, userId: string): Promise<JobAssignment> {
+    const assignment = await this.assignmentRepository.findOne({
+      where: { jobId, status: AssignmentStatus.HOURS_SUBMITTED },
+      relations: ['job'],
+    });
+
+    if (!assignment) {
+      throw new BadRequestException(APPLICATION_ERRORS.ASSIGNMENT_NOT_PENDING_HOURS);
+    }
+
+    if (assignment.hoursSubmittedBy === userId) {
+      throw new BadRequestException(APPLICATION_ERRORS.ASSIGNMENT_CONFIRM_OWN_HOURS);
+    }
+
+    if (assignment.workerId !== userId && assignment.job.employerId !== userId) {
+      throw new ForbiddenException(APPLICATION_ERRORS.ASSIGNMENT_NOT_PARTICIPANT);
+    }
+
+    // Check payment method. Note: If paymentMethod isn't explicitly P2P, we default to P2P logic here unless ESCROW is defined.
+    // For this boilerplate, assuming P2P flow. If Escrow, we just complete it.
+    if ((assignment.job.paymentMethod as any) === 'ESCROW') {
+      assignment.status = AssignmentStatus.COMPLETED;
+      assignment.completedAt = new Date();
+      assignment.job.status = JobStatus.COMPLETED as any;
+      await this.jobRepository.save(assignment.job);
+      // TODO: Call EscrowService.release(jobId, loggedHours) here
+    } else {
+      assignment.status = AssignmentStatus.PAYMENT_PENDING;
+    }
+
+    await this.assignmentRepository.save(assignment);
+
+    await this.notificationHelper.send(
+      assignment.hoursSubmittedBy,
+      NotificationType.JOB_COMPLETED,
+      assignment.jobId,
+      { 
+        jobTitle: assignment.job.title,
+        message: `Số giờ làm việc cho công việc "${assignment.job.title}" đã được xác nhận.`
+      }
+    );
+
+    return assignment;
+  }
+
+  async markPaid(jobId: string, userId: string): Promise<JobAssignment> {
+    const assignment = await this.assignmentRepository.findOne({
+      where: { jobId, status: AssignmentStatus.PAYMENT_PENDING },
+      relations: ['job'],
+    });
+
+    if (!assignment) {
+      throw new BadRequestException(APPLICATION_ERRORS.ASSIGNMENT_NOT_PENDING_PAYMENT);
+    }
+
+    if (assignment.job.employerId !== userId) {
+      throw new ForbiddenException(APPLICATION_ERRORS.ASSIGNMENT_MARK_PAID_EMPLOYER_ONLY);
+    }
+
+    assignment.status = AssignmentStatus.PAYMENT_SENT;
+    await this.assignmentRepository.save(assignment);
+
+    await this.notificationHelper.send(
+      assignment.workerId,
+      NotificationType.JOB_COMPLETED,
+      assignment.jobId,
+      { 
+        jobTitle: assignment.job.title,
+        message: `Khách hàng báo đã thanh toán cho công việc "${assignment.job.title}". Vui lòng kiểm tra và xác nhận.`
+      }
+    );
+
+    return assignment;
+  }
+
+  async confirmPaymentReceipt(jobId: string, userId: string): Promise<JobAssignment> {
+    const assignment = await this.assignmentRepository.findOne({
+      where: { jobId, status: AssignmentStatus.PAYMENT_SENT },
+      relations: ['job'],
+    });
+
+    if (!assignment) {
+      throw new BadRequestException(APPLICATION_ERRORS.ASSIGNMENT_PAYMENT_NOT_SENT);
+    }
+
+    if (assignment.workerId !== userId) {
+      throw new ForbiddenException(APPLICATION_ERRORS.ASSIGNMENT_CONFIRM_RECEIPT_WORKER_ONLY);
+    }
+
+    assignment.status = AssignmentStatus.COMPLETED;
+    assignment.completedAt = new Date();
+    await this.assignmentRepository.save(assignment);
+
+    assignment.job.status = JobStatus.COMPLETED as any;
+    await this.jobRepository.save(assignment.job);
+
+    await this.notificationHelper.send(
+      assignment.job.employerId,
+      NotificationType.JOB_COMPLETED,
+      assignment.jobId,
+      { 
+        jobTitle: assignment.job.title,
+        message: `Người làm đã xác nhận nhận đủ thanh toán. Công việc "${assignment.job.title}" đã hoàn thành!`
+      }
+    );
+
+    return assignment;
   }
 }

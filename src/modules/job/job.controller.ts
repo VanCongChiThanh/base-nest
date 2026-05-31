@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Param,
   Query,
@@ -207,6 +208,22 @@ export class JobController {
     return this.jobService.cancelJob(id, user.id);
   }
 
+  @Put('jobs/:id/negotiate-price')
+  async negotiateDirectHirePrice(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+    @Body('proposedPrice') proposedPrice: number,
+  ) {
+    const app = await this.jobService.negotiateDirectHirePrice(id, user.id, proposedPrice);
+    const formattedPrice = Number(proposedPrice).toLocaleString('vi-VN');
+    await this.applicationChatService.postMessage(
+      app.id,
+      user.id, // Using user ID so we can tell who changed it if needed, though we prefix with [Hệ thống]
+      `[Hệ thống] Mức giá đề xuất đã được đổi thành ${formattedPrice} VNĐ`,
+    );
+    return app;
+  }
+
   // ==================== WORKER ====================
 
   @Get('worker/job-history')
@@ -244,5 +261,41 @@ export class JobController {
     @CurrentUser() user: User,
   ) {
     return this.jobService.completeJob(jobId, user.id);
+  }
+  /** Hourly Workflow: Log Hours */
+  @Post('jobs/:jobId/log-hours')
+  async logHours(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @CurrentUser() user: User,
+    @Body() dto: { loggedHours: number },
+  ) {
+    return this.jobService.logHours(jobId, user.id, dto.loggedHours);
+  }
+
+  /** Hourly Workflow: Confirm Hours */
+  @Post('jobs/:jobId/confirm-hours')
+  async confirmHours(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.jobService.confirmHours(jobId, user.id);
+  }
+
+  /** Hourly Workflow: Mark Paid (P2P Employer) */
+  @Post('jobs/:jobId/mark-paid')
+  async markPaid(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.jobService.markPaid(jobId, user.id);
+  }
+
+  /** Hourly Workflow: Confirm Payment Receipt (P2P Worker) */
+  @Post('jobs/:jobId/confirm-payment-receipt')
+  async confirmPaymentReceipt(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.jobService.confirmPaymentReceipt(jobId, user.id);
   }
 }

@@ -372,6 +372,38 @@ export const APPLICATION_ERRORS = {
     message:
       'Messaging is only available after acceptance and before the job is completed',
   },
+  ASSIGNMENT_NOT_ACTIVE: {
+    code: 'ASSIGNMENT_NOT_ACTIVE',
+    message: 'No active assignment found for this job',
+  },
+  ASSIGNMENT_NOT_PARTICIPANT: {
+    code: 'ASSIGNMENT_NOT_PARTICIPANT',
+    message: 'You are not a participant in this job',
+  },
+  ASSIGNMENT_NOT_PENDING_HOURS: {
+    code: 'ASSIGNMENT_NOT_PENDING_HOURS',
+    message: 'Assignment is not pending hours confirmation',
+  },
+  ASSIGNMENT_CONFIRM_OWN_HOURS: {
+    code: 'ASSIGNMENT_CONFIRM_OWN_HOURS',
+    message: 'You cannot confirm your own submitted hours',
+  },
+  ASSIGNMENT_NOT_PENDING_PAYMENT: {
+    code: 'ASSIGNMENT_NOT_PENDING_PAYMENT',
+    message: 'Assignment is not pending payment',
+  },
+  ASSIGNMENT_MARK_PAID_EMPLOYER_ONLY: {
+    code: 'ASSIGNMENT_MARK_PAID_EMPLOYER_ONLY',
+    message: 'Only the employer can mark as paid',
+  },
+  ASSIGNMENT_PAYMENT_NOT_SENT: {
+    code: 'ASSIGNMENT_PAYMENT_NOT_SENT',
+    message: 'Assignment payment is not marked as sent yet',
+  },
+  ASSIGNMENT_CONFIRM_RECEIPT_WORKER_ONLY: {
+    code: 'ASSIGNMENT_CONFIRM_RECEIPT_WORKER_ONLY',
+    message: 'Only the worker can confirm payment receipt',
+  },
 } as const;
 
 // ==================== PROFILE ====================

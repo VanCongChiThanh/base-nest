@@ -64,11 +64,15 @@ export class UserController {
   // ==================== BANK ACCOUNTS ====================
 
   @Get('me/bank-accounts')
+  @UseGuards(RolesGuard)
+  @Roles(Role.USER)
   async getMyBankAccounts(@CurrentUser() user: User) {
     return this.userService.getBankAccounts(user.id);
   }
 
   @Post('me/bank-accounts')
+  @UseGuards(RolesGuard)
+  @Roles(Role.USER)
   async addBankAccount(
     @CurrentUser() user: User,
     @Body() dto: CreateBankAccountDto,
@@ -77,6 +81,8 @@ export class UserController {
   }
 
   @Patch('me/bank-accounts/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.USER)
   async updateBankAccount(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,
@@ -86,6 +92,8 @@ export class UserController {
   }
 
   @Delete('me/bank-accounts/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.USER)
   async deleteBankAccount(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,

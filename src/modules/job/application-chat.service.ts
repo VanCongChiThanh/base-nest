@@ -58,9 +58,11 @@ export class ApplicationChatService {
     application: JobApplication,
     assignment: JobAssignment | null,
   ): boolean {
+    const isDirectHire = application.job?.isDirectHire || application.coverLetter?.includes('Direct hire request');
     if (
       application.status !== ApplicationStatus.ACCEPTED &&
-      application.status !== ApplicationStatus.EMPLOYER_ACCEPTED
+      application.status !== ApplicationStatus.EMPLOYER_ACCEPTED &&
+      application.status !== ApplicationStatus.PENDING
     ) {
       return false;
     }
@@ -86,7 +88,8 @@ export class ApplicationChatService {
     if (
       application.job?.jobType !== JobType.ONLINE &&
       application.status !== ApplicationStatus.ACCEPTED &&
-      application.status !== ApplicationStatus.EMPLOYER_ACCEPTED
+      application.status !== ApplicationStatus.EMPLOYER_ACCEPTED &&
+      application.status !== ApplicationStatus.PENDING
     ) {
       throw new ForbiddenException(APPLICATION_ERRORS.APPLICATION_CHAT_CLOSED);
     }
@@ -110,6 +113,18 @@ export class ApplicationChatService {
         },
       })),
       canSend: this.canSendNewMessages(application, assignment),
+      jobDetails: {
+        jobId: application.jobId,
+        isDirectHire: Boolean(
+          application.job?.isDirectHire || 
+          application.coverLetter?.includes('Direct hire request')
+        ),
+        employerId: application.job?.employerId ?? '',
+        workerId: application.workerId,
+        onlinePaymentType: application.job?.onlinePaymentType ?? null,
+        salaryPerHour: application.job?.salaryPerHour ?? null,
+        totalBudget: application.job?.totalBudget ?? null,
+      },
     };
   }
 
@@ -166,15 +181,27 @@ export class ApplicationChatService {
       .leftJoinAndSelect('application.job', 'job')
       .leftJoinAndSelect('job.employer', 'employer')
       .leftJoinAndSelect('application.worker', 'worker')
-      .where('application.workerId = :userId OR job.employerId = :userId', {
+      .where('(application.workerId = :userId OR job.employerId = :userId)', {
         userId,
       })
-      .andWhere('application.status IN (:...statuses)', {
-        statuses: [
-          ApplicationStatus.EMPLOYER_ACCEPTED,
-          ApplicationStatus.ACCEPTED,
-        ],
-      })
+      .andWhere(
+        `(
+          application.status IN (:...statuses) 
+          OR (application.status = :pendingStatus AND (
+            job.isDirectHire = true 
+            OR application.coverLetter LIKE :coverLetter 
+            OR EXISTS (SELECT 1 FROM application_messages am WHERE am.application_id = application.id)
+          ))
+        )`,
+        {
+          statuses: [
+            ApplicationStatus.EMPLOYER_ACCEPTED,
+            ApplicationStatus.ACCEPTED,
+          ],
+          pendingStatus: ApplicationStatus.PENDING,
+          coverLetter: '%Direct hire request%',
+        },
+      )
       .orderBy('application.appliedAt', 'DESC')
       .getMany();
 
@@ -191,7 +218,10 @@ export class ApplicationChatService {
           applicationStatus: application.status,
           jobId: application.jobId,
           jobTitle: application.job?.title ?? 'Công việc',
-          isDirectHire: Boolean(application.job?.isDirectHire),
+          isDirectHire: Boolean(
+            application.job?.isDirectHire || 
+            application.coverLetter?.includes('Direct hire request')
+          ),
           participant:
             application.workerId === userId
               ? application.job?.employer
