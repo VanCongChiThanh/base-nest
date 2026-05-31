@@ -77,3 +77,13 @@ export class ConflictException extends BusinessException {
     super(error, HttpStatus.CONFLICT);
   }
 }
+
+/**
+ * Internal Server Error Exception - for internal system errors
+ */
+export class InternalServerErrorException extends BusinessException {
+  constructor(error: ErrorDefinition) {
+    super(error, HttpStatus.INTERNAL_SERVER_ERROR);
+  }
+}
+

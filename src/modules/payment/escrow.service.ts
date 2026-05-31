@@ -8,6 +8,7 @@ import {
   MilestoneStatus,
   NotificationType,
   JobType,
+  JobStatus,
 } from '../../common/enums';
 import payosConfig from '../../config/payos.config';
 import { Job, JobAssignment } from '../job/entities';
@@ -21,6 +22,7 @@ import {
   ESCROW_ERRORS,
   MILESTONE_ERRORS,
   JOB_ERRORS,
+  SUBSCRIPTION_ERRORS,
 } from '../../common/constants/error-codes.constant';
 import { Escrow, Milestone } from './entities';
 import {
@@ -56,10 +58,7 @@ export class EscrowService {
   private getPayOSClient(): PayOS {
     if (!this.payosClient) {
       if (!this.payosConf.clientId || !this.payosConf.apiKey || !this.payosConf.checksumKey) {
-        throw new BadRequestException({
-          code: 'PAYMENT_CONFIG_ERROR',
-          message: 'PayOS credentials are not configured.',
-        });
+        throw new BadRequestException(SUBSCRIPTION_ERRORS.PAYMENT_CONFIG_ERROR);
       }
       this.payosClient = new PayOS({
         clientId: this.payosConf.clientId,
@@ -163,10 +162,7 @@ export class EscrowService {
     } catch (error) {
       this.logger.error('Failed to create PayOS payment link for escrow', error);
       await this.escrowRepo.remove(savedEscrow);
-      throw new BadRequestException({
-        code: 'ESCROW_PAYOS_ERROR',
-        message: 'Không thể tạo link thanh toán. Vui lòng thử lại.',
-      });
+      throw new BadRequestException(ESCROW_ERRORS.ESCROW_PAYOS_ERROR);
     }
   }
 
@@ -398,6 +394,10 @@ export class EscrowService {
     escrow.status = allReleased ? EscrowStatus.FULLY_RELEASED : EscrowStatus.PARTIALLY_RELEASED;
     await this.escrowRepo.save(escrow);
 
+    if (allReleased) {
+      await this.jobRepo.update({ id: escrow.jobId }, { status: JobStatus.SETTLED as any });
+    }
+
     // Notify worker
     if (milestone.workerId) {
       await this.notificationHelper.send(
@@ -430,10 +430,7 @@ export class EscrowService {
       escrow.status !== EscrowStatus.PARTIALLY_RELEASED &&
       escrow.status !== EscrowStatus.DISPUTED
     ) {
-      throw new BadRequestException({
-        code: 'ESCROW_CANNOT_REFUND',
-        message: 'Escrow không ở trạng thái có thể hoàn tiền',
-      });
+      throw new BadRequestException(ESCROW_ERRORS.ESCROW_CANNOT_REFUND);
     }
 
     escrow.status = EscrowStatus.REFUNDED;

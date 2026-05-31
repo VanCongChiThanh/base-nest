@@ -71,6 +71,7 @@ const PLAN_SEEDS: PlanSeed[] = [
       'ai.job_chatbot.enabled': false,
       'ai.cv_screening.enabled': false,
       'ai.cv_screening.monthly_quota': 0,
+      'worker.service.active_limit': 1,
     },
   },
   {
@@ -91,6 +92,7 @@ const PLAN_SEEDS: PlanSeed[] = [
       'ai.cv_screening.enabled': true,
       'ai.cv_screening.monthly_quota': 50,
       'ai.interview_summary.enabled': true,
+      'worker.service.active_limit': 10,
     },
   },
   {
@@ -110,6 +112,7 @@ const PLAN_SEEDS: PlanSeed[] = [
       'job.post.unlimited': false,
       'ai.candidate_match.enabled': false,
       'organization.member_management.enabled': false,
+      'worker.service.active_limit': 1,
     },
   },
   {
@@ -129,6 +132,7 @@ const PLAN_SEEDS: PlanSeed[] = [
       'job.post.unlimited': true,
       'ai.candidate_match.enabled': true,
       'organization.member_management.enabled': true,
+      'worker.service.active_limit': 9999,
     },
   },
   {
@@ -180,10 +184,7 @@ export class SubscriptionService {
   private getPayOSClient(): PayOS {
     if (!this.payosClient) {
       if (!this.payosConf.clientId || !this.payosConf.apiKey || !this.payosConf.checksumKey) {
-        throw new BadRequestException({
-          code: 'PAYMENT_CONFIG_ERROR',
-          message: 'PayOS credentials are not configured. Set PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY.',
-        });
+        throw new BadRequestException(SUBSCRIPTION_ERRORS.PAYMENT_CONFIG_ERROR);
       }
       this.payosClient = new PayOS({
         clientId: this.payosConf.clientId,
@@ -279,15 +280,8 @@ export class SubscriptionService {
   async consumeQuota(user: User, quota: ConsumeQuotaConfig): Promise<void> {
     const entitlements = await this.getEntitlementsForUser(user);
 
-    if (quota.counterKey === 'job.post.count' && user.role === Role.USER) {
-      const isEkycVerified =
-        user.verificationLevel === VerificationLevel.BASIC ||
-        user.verificationLevel === VerificationLevel.BUSINESS;
-
-      if (!isEkycVerified) {
-        throw new ForbiddenException(SUBSCRIPTION_ERRORS.EKYC_REQUIRED);
-      }
-    }
+    // Cho phép user chưa eKYC đăng bài, bài sẽ không được ưu tiên hiển thị
+    // (logic ưu tiên nằm ở sortByTrustPriority trong job.service.ts)
 
     if (
       quota.counterKey === 'job.post.count' &&
@@ -492,10 +486,7 @@ export class SubscriptionService {
       return { success: true };
     } catch (error) {
       this.logger.error('Webhook verification failed', error);
-      throw new BadRequestException({
-        code: 'SUBSCRIPTION_WEBHOOK_INVALID',
-        message: 'Invalid webhook signature',
-      });
+      throw new BadRequestException(SUBSCRIPTION_ERRORS.WEBHOOK_INVALID);
     }
   }
 

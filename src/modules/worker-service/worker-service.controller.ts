@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
 import { WorkerServiceService } from './worker-service.service';
-import { CreateWorkerServiceDto, UpdateWorkerServiceDto, WorkerServiceQueryDto } from './dto';
+import { CreateWorkerServiceDto, UpdateWorkerServiceDto, WorkerServiceQueryDto, DirectHireDto } from './dto';
 import { CurrentUser, JwtAuthGuard } from '../../common'; // adjust based on actual import paths
 import { User } from '../user/entities/user.entity';
 
@@ -49,5 +49,15 @@ export class WorkerServiceController {
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() user: User) {
     return this.workerServiceService.remove(id, user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/hire')
+  hireDirectly(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+    @Body() dto: DirectHireDto,
+  ) {
+    return this.workerServiceService.hireDirectly(user.id, id, dto);
   }
 }

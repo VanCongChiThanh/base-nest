@@ -6,11 +6,7 @@
  * errorCode is independent from HTTP statusCode
  */
 
-// Helper type for error definition
-export interface ErrorDefinition {
-  readonly code: string;
-  readonly message: string;
-}
+// Helper type for error definition - redefined at the bottom
 
 // ==================== AUTH ====================
 export const AUTH_ERRORS = {
@@ -97,6 +93,18 @@ export const USER_ERRORS = {
   USER_DELETE_FORBIDDEN: {
     code: 'USER_DELETE_FORBIDDEN',
     message: 'You are not allowed to delete this user',
+  },
+  USER_ROLE_INVALID: {
+    code: 'USER_ROLE_INVALID',
+    message: 'Invalid role value',
+  },
+  USER_BANK_LIMIT_EXCEEDED: {
+    code: 'USER_BANK_LIMIT_EXCEEDED',
+    message: 'Maximum 5 bank accounts allowed',
+  },
+  USER_BANK_NOT_FOUND: {
+    code: 'USER_BANK_NOT_FOUND',
+    message: 'Bank account not found',
   },
 } as const;
 
@@ -254,6 +262,10 @@ export const SYSTEM_ERRORS = {
     code: 'SYSTEM_EXTERNAL_SERVICE_ERROR',
     message: 'External service error',
   },
+  SYSTEM_UPLOAD_SIGNATURE_FAILED: {
+    code: 'SYSTEM_UPLOAD_SIGNATURE_FAILED',
+    message: 'Failed to generate upload signature',
+  },
 } as const;
 
 // ==================== JOB ====================
@@ -294,6 +306,34 @@ export const JOB_ERRORS = {
     code: 'JOB_INVALID_TIME',
     message: 'End time must be after start time',
   },
+  JOB_INVITE_OWNER_ONLY: {
+    code: 'JOB_INVITE_OWNER_ONLY',
+    message: 'You can only invite workers to your own jobs',
+  },
+  JOB_WORKER_ALREADY_INVITED: {
+    code: 'JOB_WORKER_ALREADY_INVITED',
+    message: 'Worker already invited to this job',
+  },
+  JOB_INVITATION_NOT_FOUND: {
+    code: 'JOB_INVITATION_NOT_FOUND',
+    message: 'Invitation not found',
+  },
+  JOB_INVITATION_FORBIDDEN: {
+    code: 'JOB_INVITATION_FORBIDDEN',
+    message: 'Not your invitation',
+  },
+  JOB_INVITATION_ALREADY_RESPONDED: {
+    code: 'JOB_INVITATION_ALREADY_RESPONDED',
+    message: 'Invitation already responded',
+  },
+  JOB_COMPLETE_EMPLOYER_ONLY: {
+    code: 'JOB_COMPLETE_EMPLOYER_ONLY',
+    message: 'Only the employer can complete the job',
+  },
+  JOB_CHECK_IN_ONLY_GIG: {
+    code: 'JOB_CHECK_IN_ONLY_GIG',
+    message: 'Check-in only applies to GIG jobs',
+  },
 } as const;
 
 // ==================== JOB APPLICATION ====================
@@ -331,6 +371,38 @@ export const APPLICATION_ERRORS = {
     code: 'APPLICATION_CHAT_CLOSED',
     message:
       'Messaging is only available after acceptance and before the job is completed',
+  },
+  ASSIGNMENT_NOT_ACTIVE: {
+    code: 'ASSIGNMENT_NOT_ACTIVE',
+    message: 'No active assignment found for this job',
+  },
+  ASSIGNMENT_NOT_PARTICIPANT: {
+    code: 'ASSIGNMENT_NOT_PARTICIPANT',
+    message: 'You are not a participant in this job',
+  },
+  ASSIGNMENT_NOT_PENDING_HOURS: {
+    code: 'ASSIGNMENT_NOT_PENDING_HOURS',
+    message: 'Assignment is not pending hours confirmation',
+  },
+  ASSIGNMENT_CONFIRM_OWN_HOURS: {
+    code: 'ASSIGNMENT_CONFIRM_OWN_HOURS',
+    message: 'You cannot confirm your own submitted hours',
+  },
+  ASSIGNMENT_NOT_PENDING_PAYMENT: {
+    code: 'ASSIGNMENT_NOT_PENDING_PAYMENT',
+    message: 'Assignment is not pending payment',
+  },
+  ASSIGNMENT_MARK_PAID_EMPLOYER_ONLY: {
+    code: 'ASSIGNMENT_MARK_PAID_EMPLOYER_ONLY',
+    message: 'Only the employer can mark as paid',
+  },
+  ASSIGNMENT_PAYMENT_NOT_SENT: {
+    code: 'ASSIGNMENT_PAYMENT_NOT_SENT',
+    message: 'Assignment payment is not marked as sent yet',
+  },
+  ASSIGNMENT_CONFIRM_RECEIPT_WORKER_ONLY: {
+    code: 'ASSIGNMENT_CONFIRM_RECEIPT_WORKER_ONLY',
+    message: 'Only the worker can confirm payment receipt',
   },
 } as const;
 
@@ -448,6 +520,14 @@ export const PAYMENT_ERRORS = {
     code: 'PAYMENT_NOT_WORKER',
     message: 'Only the assigned worker can confirm payment',
   },
+  PAYMENT_NOT_P2P: {
+    code: 'PAYMENT_NOT_P2P',
+    message: 'This job does not use P2P payment',
+  },
+  PAYMENT_VIEW_FORBIDDEN: {
+    code: 'PAYMENT_VIEW_FORBIDDEN',
+    message: 'You are not allowed to view this payment information',
+  },
 } as const;
 
 // ==================== DISPUTE ====================
@@ -508,6 +588,14 @@ export const SUBSCRIPTION_ERRORS = {
     code: 'SUBSCRIPTION_PAYMENT_SYNC_FAILED',
     message: 'Không thể đồng bộ thông tin thanh toán',
   },
+  PAYMENT_CONFIG_ERROR: {
+    code: 'PAYMENT_CONFIG_ERROR',
+    message: 'PayOS credentials are not configured. Set PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY.',
+  },
+  WEBHOOK_INVALID: {
+    code: 'SUBSCRIPTION_WEBHOOK_INVALID',
+    message: 'Invalid webhook signature',
+  },
 } as const;
 
 // ==================== ESCROW ====================
@@ -536,6 +624,14 @@ export const ESCROW_ERRORS = {
     code: 'ESCROW_MILESTONE_AMOUNT_MISMATCH',
     message: 'Tổng giá trị milestone phải bằng tổng ngân sách job',
   },
+  ESCROW_PAYOS_ERROR: {
+    code: 'ESCROW_PAYOS_ERROR',
+    message: 'Không thể tạo link thanh toán. Vui lòng thử lại.',
+  },
+  ESCROW_CANNOT_REFUND: {
+    code: 'ESCROW_CANNOT_REFUND',
+    message: 'Escrow không ở trạng thái có thể hoàn tiền',
+  },
 } as const;
 
 // ==================== MILESTONE ====================
@@ -562,7 +658,29 @@ export const MILESTONE_ERRORS = {
   },
 } as const;
 
-
+// ==================== WORKER SERVICE ====================
+export const WORKER_SERVICE_ERRORS = {
+  WORKER_SERVICE_NOT_FOUND: {
+    code: 'WORKER_SERVICE_NOT_FOUND',
+    message: 'Service not found',
+  },
+  WORKER_SERVICE_UPDATE_FORBIDDEN: {
+    code: 'WORKER_SERVICE_UPDATE_FORBIDDEN',
+    message: 'You can only update your own service',
+  },
+  WORKER_SERVICE_DELETE_FORBIDDEN: {
+    code: 'WORKER_SERVICE_DELETE_FORBIDDEN',
+    message: 'You can only delete your own service',
+  },
+  WORKER_SERVICE_SELF_HIRE: {
+    code: 'WORKER_SERVICE_SELF_HIRE',
+    message: 'You cannot hire yourself',
+  },
+  WORKER_SERVICE_LIMIT_REACHED: {
+    code: 'WORKER_SERVICE_LIMIT_REACHED',
+    message: 'Your current plan allows only a limited number of active service profiles',
+  },
+} as const;
 
 // ==================== ALL ERROR CODES ====================
 export const ERROR_CODES = {
@@ -588,11 +706,14 @@ export const ERROR_CODES = {
   ...SUBSCRIPTION_ERRORS,
   ...ESCROW_ERRORS,
   ...MILESTONE_ERRORS,
+  ...WORKER_SERVICE_ERRORS,
 } as const;
-
 
 // Type for error code keys
 export type ErrorCode = keyof typeof ERROR_CODES;
+
+// Helper type for error definition strictly verified against defined error codes
+export type ErrorDefinition = typeof ERROR_CODES[keyof typeof ERROR_CODES];
 
 /**
  * Get error definition by error code

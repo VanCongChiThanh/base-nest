@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Delete,
   Body,
@@ -10,7 +11,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { UserService } from './user.service';
-import { UpdateUserDto, UserResponseDto } from './dto';
+import { UpdateUserDto, UserResponseDto, CreateBankAccountDto, UpdateBankAccountDto } from './dto';
 import { CurrentUser, Roles } from '../../common/decorators';
 import { User } from './entities';
 import { plainToInstance } from 'class-transformer';
@@ -58,6 +59,46 @@ export class UserController {
   ): Promise<UserResponseDto> {
     const updatedUser = await this.userService.update(user.id, updateUserDto);
     return plainToInstance(UserResponseDto, updatedUser);
+  }
+
+  // ==================== BANK ACCOUNTS ====================
+
+  @Get('me/bank-accounts')
+  @UseGuards(RolesGuard)
+  @Roles(Role.USER)
+  async getMyBankAccounts(@CurrentUser() user: User) {
+    return this.userService.getBankAccounts(user.id);
+  }
+
+  @Post('me/bank-accounts')
+  @UseGuards(RolesGuard)
+  @Roles(Role.USER)
+  async addBankAccount(
+    @CurrentUser() user: User,
+    @Body() dto: CreateBankAccountDto,
+  ) {
+    return this.userService.addBankAccount(user.id, dto);
+  }
+
+  @Patch('me/bank-accounts/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.USER)
+  async updateBankAccount(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+    @Body() dto: UpdateBankAccountDto,
+  ) {
+    return this.userService.updateBankAccount(user.id, id, dto);
+  }
+
+  @Delete('me/bank-accounts/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.USER)
+  async deleteBankAccount(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.userService.deleteBankAccount(user.id, id);
   }
 
   // ==================== ADMIN ====================

@@ -34,7 +34,7 @@
 | Employer Profile | ✅ Hoàn thành | Company info, badge, verified business |
 | Public Profile | ✅ Hoàn thành | Xem hồ sơ công khai |
 | Privacy Settings | ✅ Hoàn thành | PUBLIC/ACCEPTED_ONLY/PRIVATE cho phone, address, dob |
-| Avatar Upload | ✅ Hoàn thành | Qua AWS S3 presigned URL |
+| Avatar Upload | ✅ Hoàn thành | Qua Cloudinary |
 
 ### 3. Quản Lý Việc Làm (Job)
 
@@ -58,7 +58,7 @@
 | Chấp nhận/Từ chối | ✅ Hoàn thành | Employer duyệt ứng viên |
 | Auto-close job | ✅ Hoàn thành | Đủ số worker → job tự close |
 | Notification | ✅ Hoàn thành | Thông báo mỗi bước (apply, accept, reject, cancel) |
-| Chat trong application | ✅ Hoàn thành | Application chat qua WebSocket |
+| Chat trong application | ✅ Hoàn thành | Application chat qua SSE & WebSocket |
 | Quota giới hạn ứng tuyển | ✅ Hoàn thành | Theo gói subscription (daily limit) |
 
 ### 5. Tiến Trình Công Việc (Progress Tracking)
@@ -156,7 +156,7 @@
 
 | Chức năng | Trạng thái | Mô tả |
 |---|---|---|
-| Firebase Realtime DB | ✅ Hoàn thành | Dùng cho chat real-time |
+| Real-time Communication | ✅ Hoàn thành | Dùng SSE (Server-Sent Events) cho thông báo và chat |
 | Saved Jobs | ✅ Hoàn thành | Worker lưu việc yêu thích |
 | Skill management | ✅ Hoàn thành | CRUD kỹ năng (admin) + worker gắn skills |
 
@@ -216,9 +216,9 @@ src/modules/
 ├── subscription/   # Plans, Quotas, Feature gates
 ├── ekyc/           # VNPT eKYC verification
 ├── verification/   # Verification levels
-├── upload/         # AWS S3 presigned URL
+├── upload/         # Cloudinary upload signature
 ├── mail/           # Email service
-├── redis/          # Redis for refresh tokens
+├── redis/          # Redis for refresh tokens & caching
 ├── admin/          # Admin APIs
 ├── report/         # User reports
 └── location/       # Province/Ward data

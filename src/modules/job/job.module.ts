@@ -12,6 +12,7 @@ import {
   JobApplication,
   JobAssignment,
   ApplicationMessage,
+  JobInvitation,
 } from './entities';
 import { NotificationModule } from '../notification';
 import { EmployerProfile, WorkerProfile } from '../profile/entities';
@@ -33,6 +34,7 @@ import jwtConfig from '../../config/jwt.config';
       JobApplication,
       JobAssignment,
       ApplicationMessage,
+      JobInvitation,
       EmployerProfile,
       WorkerProfile,
     ]),

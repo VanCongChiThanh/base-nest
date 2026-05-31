@@ -16,6 +16,7 @@ import {
   JobType,
   OnlinePaymentType,
   ExperienceLevel,
+  PaymentMethod,
 } from '../../../common/enums';
 import { JobSkill } from './job-skill.entity';
 import { JobApplication } from './job-application.entity';
@@ -59,6 +60,14 @@ export class Job {
     default: JobStatus.OPEN,
   })
   status: JobStatus;
+
+  @Column({
+    name: 'payment_method',
+    type: 'enum',
+    enum: PaymentMethod,
+    default: PaymentMethod.P2P,
+  })
+  paymentMethod: PaymentMethod;
 
   // ──────────────────────────────────────────
   // GIG / PART_TIME fields
@@ -200,4 +209,14 @@ export class Job {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  // ──────────────────────────────────────────
+  // DIRECT HIRE fields
+  // ──────────────────────────────────────────
+
+  @Column({ name: 'is_direct_hire', default: false })
+  isDirectHire: boolean;
+
+  @Column({ name: 'target_worker_id', nullable: true })
+  targetWorkerId: string;
 }

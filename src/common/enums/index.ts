@@ -18,3 +18,4 @@ export * from './plan-scope.enum';
 export * from './job-type.enum';
 export * from './online-payment-type.enum';
 export * from './experience-level.enum';
+export * from './payment-method.enum';

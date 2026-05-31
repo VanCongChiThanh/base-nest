@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { PaymentConfirmation, Dispute } from './entities';
 import { ConfirmPaymentDto, CreateDisputeDto, ResolveDisputeDto } from './dto';
 import { Job, JobAssignment } from '../job/entities';
+import { BankAccount } from '../user/entities';
 import {
   PAYMENT_ERRORS,
   DISPUTE_ERRORS,
@@ -19,6 +20,8 @@ import {
   DisputeStatus,
   AssignmentStatus,
   NotificationType,
+  JobStatus,
+  PaymentMethod,
 } from '../../common/enums';
 import { NotificationHelper } from '../notification';
 
@@ -33,6 +36,8 @@ export class PaymentService {
     private readonly jobRepo: Repository<Job>,
     @InjectRepository(JobAssignment)
     private readonly assignmentRepo: Repository<JobAssignment>,
+    @InjectRepository(BankAccount)
+    private readonly bankAccountRepo: Repository<BankAccount>,
     private readonly notificationHelper: NotificationHelper,
   ) {}
 
@@ -40,25 +45,42 @@ export class PaymentService {
 
   async confirmFinalPayment(
     jobId: string,
-    workerId: string,
+    userId: string,
     dto: ConfirmPaymentDto,
   ): Promise<PaymentConfirmation> {
     const job = await this.jobRepo.findOne({ where: { id: jobId } });
     if (!job) throw new NotFoundException(JOB_ERRORS.JOB_NOT_FOUND);
 
-    // Verify worker is assigned
-    const assignment = await this.assignmentRepo.findOne({
-      where: { jobId, workerId, status: AssignmentStatus.COMPLETED },
-    });
-    if (!assignment) {
-      throw new BadRequestException(PAYMENT_ERRORS.PAYMENT_JOB_NOT_COMPLETED);
+    const isEmployer = job.employerId === userId;
+    let workerId = '';
+
+    if (isEmployer) {
+      // Find the assigned worker
+      const assignment = await this.assignmentRepo.findOne({
+        where: { jobId, status: AssignmentStatus.COMPLETED },
+      });
+      if (!assignment) throw new BadRequestException(PAYMENT_ERRORS.PAYMENT_JOB_NOT_COMPLETED);
+      workerId = assignment.workerId;
+    } else {
+      workerId = userId;
+      // Verify worker is assigned
+      const assignment = await this.assignmentRepo.findOne({
+        where: { jobId, workerId, status: AssignmentStatus.COMPLETED },
+      });
+      if (!assignment) {
+        throw new BadRequestException(PAYMENT_ERRORS.PAYMENT_JOB_NOT_COMPLETED);
+      }
     }
 
-    // Check if already confirmed
+    // Find existing payment
     const existing = await this.paymentRepo.findOne({
       where: { jobId, workerId, type: PaymentType.FINAL_PAYMENT },
     });
-    if (existing?.confirmedByWorker) {
+
+    if (isEmployer && existing?.confirmedByEmployer) {
+      throw new ConflictException(PAYMENT_ERRORS.PAYMENT_ALREADY_CONFIRMED);
+    }
+    if (!isEmployer && existing?.confirmedByWorker) {
       throw new ConflictException(PAYMENT_ERRORS.PAYMENT_ALREADY_CONFIRMED);
     }
 
@@ -71,22 +93,101 @@ export class PaymentService {
         type: PaymentType.FINAL_PAYMENT,
       });
 
-    payment.confirmedByWorker = true;
-    payment.confirmedAt = new Date();
-    payment.status = PaymentStatus.PAYMENT_CONFIRMED;
-    payment.note = dto.note ?? '';
+    if (isEmployer) {
+      payment.confirmedByEmployer = true;
+    } else {
+      payment.confirmedByWorker = true;
+      payment.confirmedAt = new Date();
+    }
+    
+    if (dto.note) {
+      payment.note = payment.note ? `${payment.note}\n${dto.note}` : dto.note;
+    }
+
+    // Check if both confirmed
+    if (payment.confirmedByWorker && payment.confirmedByEmployer) {
+      payment.status = PaymentStatus.PAYMENT_CONFIRMED;
+      // Also update job to SETTLED
+      await this.jobRepo.update({ id: jobId }, { status: JobStatus.SETTLED as any });
+    } else {
+      payment.status = PaymentStatus.PENDING; // Still pending until both confirm
+    }
 
     const saved = await this.paymentRepo.save(payment);
 
-    // Notify employer
+    // Notify the other party
+    const notifyUserId = isEmployer ? workerId : job.employerId;
     await this.notificationHelper.send(
-      job.employerId,
+      notifyUserId,
       NotificationType.PAYMENT_CONFIRMED,
       jobId,
       { jobTitle: job.title },
     );
 
     return saved;
+  }
+
+  // ==================== P2P PAYMENT INFO ====================
+
+  /**
+   * GET /jobs/:jobId/p2p-info
+   * Returns bank accounts of the payment receiver (worker).
+   * Business rule:
+   * - P2P jobs: employer pays worker directly.
+   * - Therefore the transfer destination must always be worker bank accounts.
+   */
+  async getP2PPaymentInfo(jobId: string, requestUserId: string) {
+    const job = await this.jobRepo.findOne({ where: { id: jobId } });
+    if (!job) throw new NotFoundException(JOB_ERRORS.JOB_NOT_FOUND);
+
+    if (job.paymentMethod !== PaymentMethod.P2P) {
+      throw new BadRequestException(PAYMENT_ERRORS.PAYMENT_NOT_P2P);
+    }
+
+    // Only participants can view payment destination info
+    const isEmployer = job.employerId === requestUserId;
+    const targetWorkerId =
+      job.targetWorkerId ||
+      (
+        await this.assignmentRepo.findOne({
+          where: { jobId },
+          order: { createdAt: 'DESC' },
+        })
+      )?.workerId ||
+      null;
+    const isTargetWorker = targetWorkerId === requestUserId;
+    if (!isEmployer && !isTargetWorker) {
+      const assignment = await this.assignmentRepo.findOne({
+        where: { jobId, workerId: requestUserId },
+      });
+      if (!assignment) {
+        throw new ForbiddenException(PAYMENT_ERRORS.PAYMENT_VIEW_FORBIDDEN);
+      }
+    }
+
+    if (!targetWorkerId) {
+      return {
+        jobId,
+        paymentMethod: job.paymentMethod,
+        bankAccounts: [],
+        isEmployer,
+        receiverRole: 'WORKER',
+      };
+    }
+
+    const targetUserId = targetWorkerId;
+    const bankAccounts = await this.bankAccountRepo.find({
+      where: { userId: targetUserId, isDefault: true },
+      order: { isDefault: 'DESC', createdAt: 'DESC' },
+    });
+
+    return {
+      jobId,
+      paymentMethod: job.paymentMethod,
+      bankAccounts,
+      isEmployer,
+      receiverRole: 'WORKER',
+    };
   }
 
   // ==================== GET PAYMENT STATUS ====================
