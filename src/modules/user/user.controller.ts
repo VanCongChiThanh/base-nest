@@ -11,7 +11,14 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { UserService } from './user.service';
-import { UpdateUserDto, UserResponseDto, CreateBankAccountDto, UpdateBankAccountDto } from './dto';
+import {
+  UpdateUserDto,
+  UserResponseDto,
+  CreateBankAccountDto,
+  UpdateBankAccountDto,
+  CreateOrganizationDto,
+  CreateRecruiterDto,
+} from './dto';
 import { CurrentUser, Roles } from '../../common/decorators';
 import { User } from './entities';
 import { plainToInstance } from 'class-transformer';
@@ -102,6 +109,54 @@ export class UserController {
   }
 
   // ==================== ADMIN ====================
+
+  /**
+   * POST /users/admin/organization - Create an organization account (Admin)
+   */
+  @Post('admin/organization')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  async createOrganization(
+    @Body() dto: CreateOrganizationDto,
+  ): Promise<UserResponseDto> {
+    const user = await this.userService.createOrganization(dto);
+    return plainToInstance(UserResponseDto, user);
+  }
+
+  // ==================== ORGANIZATION ====================
+
+  /**
+   * POST /users/recruiters - Create a recruiter account
+   */
+  @Post('recruiters')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ORGANIZATION)
+  async createRecruiter(
+    @CurrentUser() user: User,
+    @Body() dto: CreateRecruiterDto,
+  ): Promise<UserResponseDto> {
+    const recruiter = await this.userService.createRecruiter(user.id, dto);
+    return plainToInstance(UserResponseDto, recruiter);
+  }
+
+  /**
+   * GET /users/recruiters - Get all recruiters of an organization
+   */
+  @Get('recruiters')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ORGANIZATION)
+  async getRecruiters(@CurrentUser() user: User) {
+    return this.userService.findAll({
+      page: 1,
+      limit: 100, // Or implement pagination properly if needed
+      role: Role.RECRUITER,
+    }).then((res) => ({
+      ...res,
+      data: res.data.filter((u) => u.organizationId === user.id),
+    }));
+  }
+
+  // ==================== ADMIN QUERIES ====================
 
   /**
    * GET /users - Get all users (Admin)

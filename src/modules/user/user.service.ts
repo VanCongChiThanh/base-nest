@@ -14,6 +14,8 @@ import {
   AuthProvider,
   Role,
 } from '../../common';
+import { ProfileService } from '../profile/profile.service';
+import { CreateOrganizationDto, CreateRecruiterDto } from './dto';
 
 @Injectable()
 export class UserService {
@@ -22,6 +24,7 @@ export class UserService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(BankAccount)
     private readonly bankAccountRepository: Repository<BankAccount>,
+    private readonly profileService: ProfileService,
   ) {}
 
   /**
@@ -41,6 +44,54 @@ export class UserService {
       user.password = await bcrypt.hash(createUserDto.password, 10);
     }
 
+    return this.userRepository.save(user);
+  }
+
+  /**
+   * Create an organization account (Admin)
+   */
+  async createOrganization(dto: CreateOrganizationDto): Promise<User> {
+    const existingUser = await this.findByEmail(dto.email);
+    if (existingUser) {
+      throw new ConflictException(USER_ERRORS.USER_EMAIL_EXISTS);
+    }
+
+    const user = this.userRepository.create({
+      email: dto.email,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      role: Role.ORGANIZATION,
+      isEmailVerified: true,
+    });
+    user.password = await bcrypt.hash(dto.password, 10);
+    const savedUser = await this.userRepository.save(user);
+
+    await this.profileService.createEmployerProfile(savedUser.id, {
+      companyName: dto.companyName,
+      companyDescription: '',
+    });
+
+    return savedUser;
+  }
+
+  /**
+   * Create a recruiter account for an organization
+   */
+  async createRecruiter(organizationId: string, dto: CreateRecruiterDto): Promise<User> {
+    const existingUser = await this.findByEmail(dto.email);
+    if (existingUser) {
+      throw new ConflictException(USER_ERRORS.USER_EMAIL_EXISTS);
+    }
+
+    const user = this.userRepository.create({
+      email: dto.email,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      role: Role.RECRUITER,
+      isEmailVerified: true,
+      organizationId,
+    });
+    user.password = await bcrypt.hash(dto.password, 10);
     return this.userRepository.save(user);
   }
 

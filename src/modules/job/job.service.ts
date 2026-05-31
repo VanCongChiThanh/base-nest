@@ -87,7 +87,7 @@ export class JobService {
 
   // ==================== JOB CRUD ====================
 
-  async createJob(employerId: string, dto: CreateJobDto): Promise<Job> {
+  async createJob(employerId: string, postedById: string | null, dto: CreateJobDto): Promise<Job> {
     const { skillIds, ...jobData } = dto;
 
     if (dto.startTime && dto.endTime) {
@@ -99,6 +99,7 @@ export class JobService {
     const job = this.jobRepository.create({
       ...jobData,
       employerId,
+      postedById,
     });
     const saved = await this.jobRepository.save(job);
 
@@ -119,10 +120,11 @@ export class JobService {
     return fullJob;
   }
 
-  async createDirectHire(employerId: string, targetWorkerId: string, dto: Partial<CreateJobDto>): Promise<Job> {
+  async createDirectHire(employerId: string, postedById: string | null, targetWorkerId: string, dto: Partial<CreateJobDto>): Promise<Job> {
     const job = this.jobRepository.create({
       ...dto,
       employerId,
+      postedById,
       isDirectHire: true,
       targetWorkerId,
       status: JobStatus.OPEN, // Auto open

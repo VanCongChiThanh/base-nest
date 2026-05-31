@@ -172,7 +172,7 @@ export class EscrowService {
    * Gọi từ webhook khi PayOS xác nhận employer đã thanh toán
    * orderCode → identify escrow vs subscription bằng cách tra DB
    */
-  async handleEscrowDeposit(orderCode: number): Promise<boolean> {
+  async handleEscrowDeposit(orderCode: number, amountReceived?: number): Promise<boolean> {
     const escrow = await this.escrowRepo.findOne({
       where: { payosOrderCode: orderCode },
       relations: ['job'],
@@ -182,6 +182,11 @@ export class EscrowService {
     if (escrow.status === EscrowStatus.FUNDED) {
       this.logger.warn(`Escrow ${escrow.id} already funded, ignoring duplicate webhook`);
       return true;
+    }
+
+    if (amountReceived !== undefined && amountReceived < Number(escrow.totalAmount)) {
+      this.logger.warn(`Escrow ${escrow.id} underpaid. Expected ${escrow.totalAmount}, received ${amountReceived}`);
+      return true; // Return true to ack webhook but do NOT fund it
     }
 
     escrow.status = EscrowStatus.FUNDED;

@@ -210,7 +210,10 @@ export class AiController {
         ? `${job.employer.firstName} ${job.employer.lastName}`
         : undefined,
       address: job.address,
-      salary: job.salaryPerHour || job.totalBudget || undefined,
+      salary: Number(job.salaryPerHour || job.totalBudget || 0),
+      salaryText: job.salaryType === 'HOURLY' 
+        ? `${Number(job.salaryPerHour).toLocaleString()}₫/giờ` 
+        : `${Number(job.totalBudget).toLocaleString()}₫ (Khoán)`,
     });
   }
 

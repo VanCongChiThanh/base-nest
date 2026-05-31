@@ -41,7 +41,9 @@ export class JobController {
     period: 'monthly',
   })
   async createJob(@CurrentUser() user: User, @Body() dto: CreateJobDto) {
-    return this.jobService.createJob(user.id, dto);
+    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const postedById = user.role === Role.RECRUITER ? user.id : null;
+    return this.jobService.createJob(employerId, postedById, dto);
   }
 
   @Get('jobs')
@@ -95,7 +97,8 @@ export class JobController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.jobService.getJobApplications(id, user.id, page, limit);
+    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.jobService.getJobApplications(id, employerId, page, limit);
   }
 
   @Post('applications/:id/accept')
@@ -103,7 +106,8 @@ export class JobController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,
   ) {
-    return this.jobService.acceptApplication(id, user.id);
+    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.jobService.acceptApplication(id, employerId);
   }
 
   @Post('applications/:id/respond-acceptance')
@@ -120,7 +124,8 @@ export class JobController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,
   ) {
-    return this.jobService.rejectApplication(id, user.id);
+    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.jobService.rejectApplication(id, employerId);
   }
 
   // ==================== INVITATIONS ====================
@@ -131,7 +136,8 @@ export class JobController {
     @CurrentUser() user: User,
     @Body('workerId') workerId: string,
   ) {
-    return this.jobService.inviteWorkerToJob(user.id, id, workerId);
+    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.jobService.inviteWorkerToJob(employerId, id, workerId);
   }
 
   @Post('invitations/:id/respond')
@@ -197,7 +203,8 @@ export class JobController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.jobService.findEmployerJobs(user.id, page, limit);
+    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.jobService.findEmployerJobs(employerId, page, limit);
   }
 
   @Post('jobs/:id/cancel')
@@ -205,7 +212,8 @@ export class JobController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,
   ) {
-    return this.jobService.cancelJob(id, user.id);
+    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.jobService.cancelJob(id, employerId);
   }
 
   @Put('jobs/:id/negotiate-price')

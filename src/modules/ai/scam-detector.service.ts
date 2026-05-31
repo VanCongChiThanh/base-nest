@@ -18,6 +18,7 @@ interface JobContent {
   description: string;
   companyName?: string;
   salary?: number;
+  salaryText?: string;
   address?: string;
 }
 
@@ -30,7 +31,7 @@ const RULE_CHECKS: Array<{
 }> = [
   {
     name: 'excessive_salary',
-    check: (job) => !!job.salary && job.salary > 200000,
+    check: (job) => !!job.salary && (!job.salaryText || job.salaryText.includes('giờ')) && job.salary > 200000,
     score: 25,
     reason: 'Mức lương cao bất thường (>200,000₫/giờ) cho công việc thời vụ',
   },
@@ -302,7 +303,7 @@ export class ScamDetectorService {
 Tiêu đề: ${job.title}
 Mô tả: ${job.description}
 Công ty: ${job.companyName || 'Không rõ'}
-Lương/giờ: ${job.salary ? `${job.salary.toLocaleString()}₫` : 'Không rõ'}
+Mức lương: ${job.salaryText || (job.salary ? `${job.salary.toLocaleString()}₫` : 'Không rõ')}
 Địa chỉ: ${job.address || 'Không rõ'}`.trim();
 
       const response = await this.geminiService.generateContent(
