@@ -9,6 +9,7 @@ import {
   NotificationType,
   JobType,
   JobStatus,
+  AssignmentStatus,
 } from '../../common/enums';
 import payosConfig from '../../config/payos.config';
 import { Job, JobAssignment } from '../job/entities';
