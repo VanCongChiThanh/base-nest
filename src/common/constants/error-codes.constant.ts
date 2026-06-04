@@ -334,6 +334,22 @@ export const JOB_ERRORS = {
     code: 'JOB_CHECK_IN_ONLY_GIG',
     message: 'Check-in only applies to GIG jobs',
   },
+  JOB_REQUIRE_EKYC: {
+    code: 'JOB_REQUIRE_EKYC',
+    message: 'Bạn cần hoàn tất xác thực eKYC để có thể đăng tin tuyển dụng.',
+  },
+  JOB_NEGOTIATE_DIRECT_HIRE_ONLY: {
+    code: 'JOB_NEGOTIATE_DIRECT_HIRE_ONLY',
+    message: 'Chỉ có thể thương lượng giá cho yêu cầu Thuê ngay (Direct Hire)',
+  },
+  JOB_NEGOTIATE_ACCESS_FORBIDDEN: {
+    code: 'JOB_NEGOTIATE_ACCESS_FORBIDDEN',
+    message: 'Bạn không có quyền thương lượng giá cho yêu cầu này',
+  },
+  JOB_NEGOTIATE_ALREADY_ACCEPTED: {
+    code: 'JOB_NEGOTIATE_ALREADY_ACCEPTED',
+    message: 'Hợp đồng đã được chấp nhận, không thể đổi giá',
+  },
 } as const;
 
 // ==================== JOB APPLICATION ====================
@@ -403,6 +419,10 @@ export const APPLICATION_ERRORS = {
   ASSIGNMENT_CONFIRM_RECEIPT_WORKER_ONLY: {
     code: 'ASSIGNMENT_CONFIRM_RECEIPT_WORKER_ONLY',
     message: 'Only the worker can confirm payment receipt',
+  },
+  APPLICATION_NEGOTIATE_NOT_FOUND: {
+    code: 'APPLICATION_NEGOTIATE_NOT_FOUND',
+    message: 'Không tìm thấy đơn ứng tuyển của yêu cầu này',
   },
 } as const;
 

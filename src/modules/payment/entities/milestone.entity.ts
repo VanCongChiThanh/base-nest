@@ -93,6 +93,9 @@ export class Milestone {
   @Column({ name: 'released_at', type: 'timestamptz', nullable: true })
   releasedAt: Date;
 
+  @Column({ name: 'worker_received_at', type: 'timestamptz', nullable: true })
+  workerReceivedAt: Date;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

@@ -204,7 +204,33 @@ export class PaymentController {
     return this.escrowService.respondToProposal(id, user.id, accept);
   }
 
+  /**
+   * POST /escrow/milestones/:id/confirm-receipt
+   * Worker xác nhận đã nhận được tiền giải ngân
+   */
+  @Post('escrow/milestones/:id/confirm-receipt')
+  async confirmMilestoneReceipt(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.escrowService.confirmMilestoneReceipt(id, user.id);
+  }
+
   // ==================== ADMIN: GIẢI NGÂN ====================
+
+  /**
+   * GET /admin/escrow/milestones
+   * Lấy danh sách milestones (dùng cho admin quản lý giải ngân)
+   */
+  @Roles(Role.ADMIN)
+  @Get('admin/escrow/milestones')
+  async getAdminMilestones(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+  ) {
+    return this.escrowService.getAdminMilestones(page, limit, status);
+  }
 
   /**
    * POST /admin/escrow/milestones/:id/release

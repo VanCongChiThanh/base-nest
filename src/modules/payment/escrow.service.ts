@@ -91,7 +91,11 @@ export class EscrowService {
     // Kiểm tra đã có escrow chưa
     const existing = await this.escrowRepo.findOne({ where: { jobId: dto.jobId } });
     if (existing) {
-      throw new BadRequestException(ESCROW_ERRORS.ESCROW_ALREADY_EXISTS);
+      if (existing.status === EscrowStatus.PENDING) {
+        await this.escrowRepo.remove(existing);
+      } else {
+        throw new BadRequestException(ESCROW_ERRORS.ESCROW_ALREADY_EXISTS);
+      }
     }
 
     const totalAmount = dto.milestones.reduce((s, m) => s + m.amount, 0);
@@ -208,7 +212,7 @@ export class EscrowService {
         assignment.workerId,
         NotificationType.ESCROW_DEPOSITED,
         escrow.id,
-        { jobTitle: escrow.job?.title ?? '' },
+        { jobTitle: escrow.job?.title ?? '', jobId: escrow.jobId },
       );
     }
 
@@ -239,6 +243,31 @@ export class EscrowService {
   }
 
   // ==================== GET ESCROW ====================
+
+  async getAdminMilestones(page: number = 1, limit: number = 10, status?: string) {
+    const query = this.milestoneRepo.createQueryBuilder('milestone')
+      .leftJoinAndSelect('milestone.escrow', 'escrow')
+      .leftJoinAndSelect('escrow.job', 'job')
+      .leftJoinAndSelect('milestone.worker', 'worker')
+      .leftJoinAndSelect('worker.bankAccounts', 'bankAccounts')
+      .orderBy('milestone.createdAt', 'DESC');
+
+    if (status) {
+      query.andWhere('milestone.status = :status', { status });
+    }
+
+    const [data, total] = await query
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+    };
+  }
 
   async getEscrowByJob(jobId: string, requesterId: string) {
     const job = await this.jobRepo.findOne({ where: { id: jobId } });
@@ -303,6 +332,7 @@ export class EscrowService {
       {
         milestoneTitle: milestone.title,
         jobTitle: milestone.escrow.job?.title ?? '',
+        jobId: milestone.escrow.jobId,
       },
     );
 
@@ -340,6 +370,7 @@ export class EscrowService {
             milestoneTitle: milestone.title,
             amount: milestone.amount,
             jobTitle: milestone.escrow.job?.title ?? '',
+            jobId: milestone.escrow.jobId,
           },
         );
       }
@@ -359,6 +390,7 @@ export class EscrowService {
             milestoneTitle: milestone.title,
             note: dto.note ?? '',
             jobTitle: milestone.escrow.job?.title ?? '',
+            jobId: milestone.escrow.jobId,
           },
         );
       }
@@ -413,6 +445,7 @@ export class EscrowService {
           milestoneTitle: milestone.title,
           amount: milestone.amount,
           jobTitle: milestone.escrow.job?.title ?? '',
+          jobId: milestone.escrow.jobId,
         },
       );
     }
@@ -449,6 +482,7 @@ export class EscrowService {
       {
         jobTitle: escrow.job?.title ?? '',
         reason,
+        jobId: escrow.jobId,
       },
     );
 
@@ -465,7 +499,7 @@ export class EscrowService {
   ) {
     const escrow = await this.escrowRepo.findOne({
       where: { jobId },
-      relations: ['milestones'],
+      relations: ['milestones', 'job'],
     });
     if (!escrow) throw new NotFoundException(ESCROW_ERRORS.ESCROW_NOT_FOUND);
     if (escrow.status !== EscrowStatus.FUNDED && escrow.status !== EscrowStatus.PARTIALLY_RELEASED) {
@@ -498,7 +532,11 @@ export class EscrowService {
       escrow.employerId,
       NotificationType.MILESTONE_PROPOSED,
       milestone.id,
-      { milestoneTitle: dto.title },
+      {
+        milestoneTitle: dto.title,
+        jobTitle: escrow.job?.title ?? '',
+        jobId: escrow.jobId,
+      },
     );
 
     return milestone;
@@ -532,5 +570,21 @@ export class EscrowService {
     }
     await this.milestoneRepo.save(milestone);
     return { accepted: true, milestone };
+  }
+
+  // ==================== WORKER: XÁC NHẬN ĐÃ NHẬN TIỀN ====================
+
+  async confirmMilestoneReceipt(milestoneId: string, workerId: string) {
+    const milestone = await this.milestoneRepo.findOne({ where: { id: milestoneId } });
+    if (!milestone) throw new NotFoundException(MILESTONE_ERRORS.MILESTONE_NOT_FOUND);
+    if (milestone.workerId !== workerId) throw new ForbiddenException(MILESTONE_ERRORS.MILESTONE_ACCESS_FORBIDDEN);
+    if (milestone.status !== MilestoneStatus.RELEASED) {
+      throw new BadRequestException(MILESTONE_ERRORS.MILESTONE_WRONG_STATUS);
+    }
+    
+    milestone.workerReceivedAt = new Date();
+    await this.milestoneRepo.save(milestone);
+    
+    return milestone;
   }
 }

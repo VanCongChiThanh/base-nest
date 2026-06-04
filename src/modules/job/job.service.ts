@@ -1,11 +1,13 @@
-import { Injectable, BadRequestException as NestBadRequestException, ForbiddenException as NestForbiddenException, NotFoundException as NestNotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Job, JobSkill, JobApplication, JobAssignment, JobInvitation } from './entities';
+import { Escrow } from '../payment/entities';
 import { CreateJobDto, ApplyJobDto, JobFilterDto, CheckInJobDto } from './dto';
 import {
   JOB_ERRORS,
   APPLICATION_ERRORS,
+  ESCROW_ERRORS,
   NotFoundException,
   ForbiddenException,
   ConflictException,
@@ -21,6 +23,8 @@ import {
   JobSalaryType,
   OnlinePaymentType,
   VerificationLevel,
+  PaymentMethod,
+  EscrowStatus,
 } from '../../common/enums';
 import { JobInvitationStatus } from './entities/job-invitation.entity';
 import { NotificationHelper } from '../notification';
@@ -81,6 +85,8 @@ export class JobService {
     private readonly employerProfileRepository: Repository<EmployerProfile>,
     @InjectRepository(WorkerProfile)
     private readonly workerProfileRepository: Repository<WorkerProfile>,
+    @InjectRepository(Escrow)
+    private readonly escrowRepository: Repository<Escrow>,
     private readonly notificationHelper: NotificationHelper,
     private readonly aiSyncCronService: AiSyncCronService,
   ) {}
@@ -156,27 +162,28 @@ export class JobService {
   async negotiateDirectHirePrice(jobId: string, userId: string, proposedPrice: number): Promise<JobApplication> {
     const job = await this.findJobById(jobId);
     if (!job.isDirectHire) {
-      throw new NestBadRequestException('Chỉ có thể thương lượng giá cho yêu cầu Thuê ngay (Direct Hire)');
+      throw new BadRequestException(JOB_ERRORS.JOB_NEGOTIATE_DIRECT_HIRE_ONLY);
     }
 
     const application = await this.applicationRepository.findOne({ where: { jobId } });
     if (!application) {
-      throw new NestNotFoundException('Không tìm thấy đơn ứng tuyển của yêu cầu này');
+      throw new NotFoundException(APPLICATION_ERRORS.APPLICATION_NEGOTIATE_NOT_FOUND);
     }
 
     const isEmployer = job.employerId === userId;
     const isWorker = application.workerId === userId;
 
     if (!isEmployer && !isWorker) {
-      throw new NestForbiddenException('Bạn không có quyền thương lượng giá cho yêu cầu này');
+      throw new ForbiddenException(JOB_ERRORS.JOB_NEGOTIATE_ACCESS_FORBIDDEN);
     }
 
     if (application.status === ApplicationStatus.ACCEPTED) {
-      throw new NestBadRequestException('Hợp đồng đã được chấp nhận, không thể đổi giá');
+      throw new BadRequestException(JOB_ERRORS.JOB_NEGOTIATE_ALREADY_ACCEPTED);
     }
 
     // Update job price
-    if (job.onlinePaymentType === 'FIXED_PRICE') {
+    
+    if (job.onlinePaymentType === OnlinePaymentType.FIXED_PRICE) {
       job.totalBudget = proposedPrice;
     } else {
       job.salaryPerHour = proposedPrice;
@@ -766,6 +773,12 @@ export class JobService {
         'workerProfile',
         'workerProfile.userId = worker.id'
       )
+      .leftJoinAndMapOne(
+        'app.assignment',
+        'JobAssignment',
+        'assignment',
+        'assignment.applicationId = app.id'
+      )
       .where('app.jobId = :jobId', { jobId })
       .orderBy('app.appliedAt', 'DESC')
       .skip((page - 1) * limit)
@@ -830,7 +843,10 @@ export class JobService {
       assignment.job.employerId,
       NotificationType.JOB_CHECKED_IN,
       jobId,
-      { jobTitle: assignment.job.title },
+      { 
+        jobTitle: assignment.job.title,
+        applicationId: assignment.applicationId 
+      },
     );
 
     return saved;
@@ -899,9 +915,31 @@ export class JobService {
       throw new BadRequestException(JOB_ERRORS.JOB_NOT_OPEN);
     }
 
+    // Block completing ONLINE + ESCROW jobs if escrow is not funded
+    if (job.jobType === JobType.ONLINE && (job as any).paymentMethod === PaymentMethod.ESCROW) {
+      const escrow = await this.escrowRepository.findOne({ where: { jobId } });
+      if (!escrow || escrow.status === EscrowStatus.PENDING) {
+        throw new BadRequestException(ESCROW_ERRORS.ESCROW_NOT_FUNDED);
+      }
+    }
+
     // Set job to COMPLETED
     job.status = JobStatus.COMPLETED as any;
     await this.jobRepository.save(job);
+
+    // Also mark assignments as PAYMENT_SENT if Employer completes first
+    // This allows the Worker to confirm receipt of money (P2P) or confirm completion (Escrow)
+    const assignments = await this.assignmentRepository.find({ where: { jobId } });
+    for (const assignment of assignments) {
+      if (
+        assignment.status === AssignmentStatus.ASSIGNED ||
+        assignment.status === AssignmentStatus.IN_PROGRESS ||
+        assignment.status === AssignmentStatus.PAYMENT_PENDING
+      ) {
+        assignment.status = AssignmentStatus.PAYMENT_SENT;
+        await this.assignmentRepository.save(assignment);
+      }
+    }
 
     return this.findJobById(jobId);
   }
@@ -1339,7 +1377,17 @@ export class JobService {
       throw new ForbiddenException(APPLICATION_ERRORS.ASSIGNMENT_MARK_PAID_EMPLOYER_ONLY);
     }
 
-    assignment.status = AssignmentStatus.PAYMENT_SENT;
+    // For ESCROW jobs, markPaid means Employer confirms the work is done, so we skip PAYMENT_SENT and go straight to COMPLETED.
+    if ((assignment.job.paymentMethod as any) === PaymentMethod.ESCROW) {
+      assignment.status = AssignmentStatus.COMPLETED;
+      assignment.completedAt = new Date();
+      assignment.job.status = JobStatus.COMPLETED as any;
+      await this.jobRepository.save(assignment.job);
+      // TODO: EscrowService.release should be called here in the future
+    } else {
+      assignment.status = AssignmentStatus.PAYMENT_SENT;
+    }
+    
     await this.assignmentRepository.save(assignment);
 
     await this.notificationHelper.send(

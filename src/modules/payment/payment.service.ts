@@ -97,6 +97,7 @@ export class PaymentService {
       payment.confirmedByEmployer = true;
     } else {
       payment.confirmedByWorker = true;
+      payment.confirmedByEmployer = true;
       payment.confirmedAt = new Date();
     }
     

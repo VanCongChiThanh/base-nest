@@ -24,7 +24,7 @@ export class EkycResult {
   @Column({ name: 'full_name', nullable: true })
   fullName: string;
 
-  @Column({ name: 'id_number', nullable: true })
+  @Column({ name: 'id_number', unique: true, nullable: true })
   idNumber: string;
 
   @Column({ name: 'date_of_birth', nullable: true })

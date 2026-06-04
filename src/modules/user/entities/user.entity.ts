@@ -10,6 +10,7 @@ import { Role, VerificationLevel } from '../../../common/enums';
 import { Exclude } from 'class-transformer';
 import { UserProvider } from '../../auth/entities';
 import { ManyToOne, JoinColumn } from 'typeorm';
+import { BankAccount } from './bank-account.entity';
 
 @Entity('users')
 export class User {
@@ -83,4 +84,7 @@ export class User {
 
   @OneToMany(() => User, (user) => user.organization)
   members: User[];
+
+  @OneToMany(() => BankAccount, (bankAccount) => bankAccount.user)
+  bankAccounts: BankAccount[];
 }
