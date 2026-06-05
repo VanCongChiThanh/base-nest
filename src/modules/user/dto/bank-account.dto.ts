@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsBoolean, IsOptional, IsUrl } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsBoolean,
+  IsOptional,
+  IsUrl,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class CreateBankAccountDto {

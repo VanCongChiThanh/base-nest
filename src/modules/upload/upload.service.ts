@@ -2,7 +2,12 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
 import { PresignedUrlDto, PresignedUrlResponseDto } from './dto';
-import { UPLOAD_ERRORS, SYSTEM_ERRORS, BadRequestException, InternalServerErrorException } from '../../common';
+import {
+  UPLOAD_ERRORS,
+  SYSTEM_ERRORS,
+  BadRequestException,
+  InternalServerErrorException,
+} from '../../common';
 import cloudinaryConfig from '../../config/cloudinary.config';
 
 @Injectable()
@@ -34,7 +39,9 @@ export class UploadService {
     this.apiSecret = this.cloudinaryConf.apiSecret || '';
 
     if (!this.cloudName || !this.apiKey || !this.apiSecret) {
-      console.warn('Cloudinary configuration is missing. Upload feature might fail.');
+      console.warn(
+        'Cloudinary configuration is missing. Upload feature might fail.',
+      );
     }
 
     cloudinary.config({
@@ -88,7 +95,9 @@ export class UploadService {
         folder,
       });
     } catch (error) {
-      throw new InternalServerErrorException(SYSTEM_ERRORS.SYSTEM_UPLOAD_SIGNATURE_FAILED);
+      throw new InternalServerErrorException(
+        SYSTEM_ERRORS.SYSTEM_UPLOAD_SIGNATURE_FAILED,
+      );
     }
   }
 }

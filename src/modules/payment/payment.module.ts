@@ -5,7 +5,7 @@ import { PaymentController } from './payment.controller';
 import { EscrowService } from './escrow.service';
 import { PaymentConfirmation, Dispute, Escrow, Milestone } from './entities';
 import { Job, JobAssignment } from '../job/entities';
-import { BankAccount } from '../user/entities';
+import { BankAccount, User } from '../user/entities';
 import { NotificationModule } from '../notification';
 import payosConfig from '../../config/payos.config';
 import { ConfigModule } from '@nestjs/config';
@@ -21,6 +21,7 @@ import { ConfigModule } from '@nestjs/config';
       Job,
       JobAssignment,
       BankAccount,
+      User,
     ]),
     NotificationModule,
   ],

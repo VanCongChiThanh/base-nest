@@ -67,13 +67,15 @@ export class ProfileController {
     @CurrentUser() user: User,
     @Body() dto: CreateEmployerProfileDto,
   ) {
-    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const targetUserId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.profileService.createEmployerProfile(targetUserId, dto);
   }
 
   @Get('employer/me')
   async getMyEmployerProfile(@CurrentUser() user: User) {
-    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const targetUserId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.profileService.getEmployerProfile(targetUserId);
   }
 
@@ -82,7 +84,8 @@ export class ProfileController {
     @CurrentUser() user: User,
     @Body() dto: UpdateEmployerProfileDto,
   ) {
-    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const targetUserId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.profileService.updateEmployerProfile(targetUserId, dto);
   }
 
@@ -91,7 +94,8 @@ export class ProfileController {
     @CurrentUser() user: User,
     @Body() dto: UpdateEmployerPrivacyDto,
   ) {
-    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const targetUserId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.profileService.updateEmployerPrivacySettings(targetUserId, dto);
   }
 

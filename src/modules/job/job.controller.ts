@@ -47,7 +47,8 @@ export class JobController {
       throw new BadRequestException(JOB_ERRORS.JOB_REQUIRE_EKYC);
     }
 
-    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const employerId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     const postedById = user.role === Role.RECRUITER ? user.id : null;
     return this.jobService.createJob(employerId, postedById, dto);
   }
@@ -103,7 +104,8 @@ export class JobController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const employerId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.getJobApplications(id, employerId, page, limit);
   }
 
@@ -112,7 +114,8 @@ export class JobController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,
   ) {
-    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const employerId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.acceptApplication(id, employerId);
   }
 
@@ -130,7 +133,8 @@ export class JobController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,
   ) {
-    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const employerId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.rejectApplication(id, employerId);
   }
 
@@ -142,7 +146,8 @@ export class JobController {
     @CurrentUser() user: User,
     @Body('workerId') workerId: string,
   ) {
-    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const employerId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.inviteWorkerToJob(employerId, id, workerId);
   }
 
@@ -209,7 +214,8 @@ export class JobController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const employerId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.findEmployerJobs(employerId, page, limit);
   }
 
@@ -218,7 +224,8 @@ export class JobController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,
   ) {
-    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const employerId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.cancelJob(id, employerId);
   }
 
@@ -228,7 +235,11 @@ export class JobController {
     @CurrentUser() user: User,
     @Body('proposedPrice') proposedPrice: number,
   ) {
-    const app = await this.jobService.negotiateDirectHirePrice(id, user.id, proposedPrice);
+    const app = await this.jobService.negotiateDirectHirePrice(
+      id,
+      user.id,
+      proposedPrice,
+    );
     const formattedPrice = Number(proposedPrice).toLocaleString('vi-VN');
     await this.applicationChatService.postMessage(
       app.id,
@@ -265,7 +276,8 @@ export class JobController {
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @CurrentUser() user: User,
   ) {
-    const actorId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const actorId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.completeJobByEmployer(jobId, actorId);
   }
 
@@ -275,7 +287,8 @@ export class JobController {
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @CurrentUser() user: User,
   ) {
-    const actorId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const actorId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.completeJob(jobId, actorId);
   }
   /** Hourly Workflow: Log Hours */
@@ -285,7 +298,8 @@ export class JobController {
     @CurrentUser() user: User,
     @Body() dto: { loggedHours: number },
   ) {
-    const actorId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const actorId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.logHours(jobId, actorId, dto.loggedHours);
   }
 
@@ -295,7 +309,8 @@ export class JobController {
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @CurrentUser() user: User,
   ) {
-    const actorId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const actorId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.confirmHours(jobId, actorId);
   }
 
@@ -305,7 +320,8 @@ export class JobController {
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @CurrentUser() user: User,
   ) {
-    const actorId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const actorId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.markPaid(jobId, actorId);
   }
 
@@ -315,7 +331,8 @@ export class JobController {
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @CurrentUser() user: User,
   ) {
-    const actorId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const actorId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.confirmPaymentReceipt(jobId, actorId);
   }
 }

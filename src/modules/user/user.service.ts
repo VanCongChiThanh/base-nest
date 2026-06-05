@@ -1,10 +1,13 @@
-import {
-  Injectable,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, BankAccount } from './entities';
-import { CreateUserDto, UpdateUserDto, CreateBankAccountDto, UpdateBankAccountDto } from './dto';
+import {
+  CreateUserDto,
+  UpdateUserDto,
+  CreateBankAccountDto,
+  UpdateBankAccountDto,
+} from './dto';
 import * as bcrypt from 'bcrypt';
 import {
   USER_ERRORS,
@@ -77,7 +80,10 @@ export class UserService {
   /**
    * Create a recruiter account for an organization
    */
-  async createRecruiter(organizationId: string, dto: CreateRecruiterDto): Promise<User> {
+  async createRecruiter(
+    organizationId: string,
+    dto: CreateRecruiterDto,
+  ): Promise<User> {
     const existingUser = await this.findByEmail(dto.email);
     if (existingUser) {
       throw new ConflictException(USER_ERRORS.USER_EMAIL_EXISTS);
@@ -265,8 +271,13 @@ export class UserService {
     });
   }
 
-  async addBankAccount(userId: string, dto: CreateBankAccountDto): Promise<BankAccount> {
-    const existing = await this.bankAccountRepository.find({ where: { userId } });
+  async addBankAccount(
+    userId: string,
+    dto: CreateBankAccountDto,
+  ): Promise<BankAccount> {
+    const existing = await this.bankAccountRepository.find({
+      where: { userId },
+    });
     if (existing.length >= 5) {
       throw new BadRequestException(USER_ERRORS.USER_BANK_LIMIT_EXCEEDED);
     }
@@ -279,15 +290,22 @@ export class UserService {
     const bankAccount = this.bankAccountRepository.create({
       ...dto,
       userId,
-      isDefault: existing.length === 0 ? true : dto.isDefault ?? false,
+      isDefault: existing.length === 0 ? true : (dto.isDefault ?? false),
     });
 
     return this.bankAccountRepository.save(bankAccount);
   }
 
-  async updateBankAccount(userId: string, id: string, dto: UpdateBankAccountDto): Promise<BankAccount> {
-    const bankAccount = await this.bankAccountRepository.findOne({ where: { id, userId } });
-    if (!bankAccount) throw new NotFoundException(USER_ERRORS.USER_BANK_NOT_FOUND);
+  async updateBankAccount(
+    userId: string,
+    id: string,
+    dto: UpdateBankAccountDto,
+  ): Promise<BankAccount> {
+    const bankAccount = await this.bankAccountRepository.findOne({
+      where: { id, userId },
+    });
+    if (!bankAccount)
+      throw new NotFoundException(USER_ERRORS.USER_BANK_NOT_FOUND);
 
     if (dto.isDefault) {
       await this.bankAccountRepository.update({ userId }, { isDefault: false });
@@ -298,8 +316,11 @@ export class UserService {
   }
 
   async deleteBankAccount(userId: string, id: string): Promise<void> {
-    const bankAccount = await this.bankAccountRepository.findOne({ where: { id, userId } });
-    if (!bankAccount) throw new NotFoundException(USER_ERRORS.USER_BANK_NOT_FOUND);
+    const bankAccount = await this.bankAccountRepository.findOne({
+      where: { id, userId },
+    });
+    if (!bankAccount)
+      throw new NotFoundException(USER_ERRORS.USER_BANK_NOT_FOUND);
 
     await this.bankAccountRepository.remove(bankAccount);
   }

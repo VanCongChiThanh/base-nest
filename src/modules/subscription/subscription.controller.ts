@@ -32,7 +32,7 @@ export class SubscriptionController {
 
   @Get('me/usage')
   async getMyUsage(@CurrentUser() user: User) {
-    return this.subscriptionService.getUsageSnapshot(user.id);
+    return this.subscriptionService.getUsageSnapshot(user);
   }
 
   @UseGuards(RolesGuard)

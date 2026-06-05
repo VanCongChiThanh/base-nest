@@ -1,4 +1,12 @@
-import { IsString, IsOptional, MaxLength, IsArray, IsIn, IsBoolean, IsUUID } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  MaxLength,
+  IsArray,
+  IsIn,
+  IsBoolean,
+  IsUUID,
+} from 'class-validator';
 import { ALL_SYNC_TARGETS, SyncTarget } from '../ai-embedding.constants';
 
 export class AiChatDto {

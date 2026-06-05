@@ -36,7 +36,10 @@ export class AiMatchingService {
 Title: ${job.title}
 Category: ${job.category?.name ?? 'General'}
 Description: ${job.description}
-Requirements: ${job.jobSkills?.map((s) => s.skill?.name).filter(Boolean).join(', ')}
+Requirements: ${job.jobSkills
+      ?.map((s) => s.skill?.name)
+      .filter(Boolean)
+      .join(', ')}
 Location: Province Code ${job.provinceCode}
     `.trim();
 
@@ -60,7 +63,10 @@ ${jobDescriptionStr}
         searchQuery = response.text.trim();
       }
     } catch (e) {
-      this.logger.warn('Failed to generate search query with Gemini, using job title', e);
+      this.logger.warn(
+        'Failed to generate search query with Gemini, using job title',
+        e,
+      );
     }
 
     // 2. Embed the search query
@@ -151,7 +157,9 @@ Return ONLY the JSON array, without any markdown formatting like \`\`\`json.
 
       // Map back to full data
       const finalResult = parsedMatches.map((match: any) => {
-        const candidate = candidatesData.find((c: any) => c.workerId === match.workerId);
+        const candidate = candidatesData.find(
+          (c: any) => c.workerId === match.workerId,
+        );
         return {
           workerId: match.workerId,
           fullName: candidate?.name || 'Unknown Candidate',
@@ -169,7 +177,7 @@ Return ONLY the JSON array, without any markdown formatting like \`\`\`json.
       return finalResult.filter((c: any) => c.workerId);
     } catch (e) {
       this.logger.error('Failed to parse Gemini rerank response', e);
-      
+
       // Fallback: return vector search results
       return candidatesData.slice(0, limit).map((c: any) => ({
         workerId: c.workerId,

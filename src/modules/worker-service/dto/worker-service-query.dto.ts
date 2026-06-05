@@ -1,4 +1,10 @@
-import { IsOptional, IsString, IsNumber, IsBoolean, IsEnum } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsBoolean,
+  IsEnum,
+} from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ServiceType } from '../entities';
 

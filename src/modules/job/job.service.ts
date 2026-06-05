@@ -1,7 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
-import { Job, JobSkill, JobApplication, JobAssignment, JobInvitation } from './entities';
+import {
+  Job,
+  JobSkill,
+  JobApplication,
+  JobAssignment,
+  JobInvitation,
+} from './entities';
 import { Escrow } from '../payment/entities';
 import { CreateJobDto, ApplyJobDto, JobFilterDto, CheckInJobDto } from './dto';
 import {
@@ -93,7 +99,11 @@ export class JobService {
 
   // ==================== JOB CRUD ====================
 
-  async createJob(employerId: string, postedById: string | null, dto: CreateJobDto): Promise<Job> {
+  async createJob(
+    employerId: string,
+    postedById: string | null,
+    dto: CreateJobDto,
+  ): Promise<Job> {
     const { skillIds, ...jobData } = dto;
 
     if (dto.startTime && dto.endTime) {
@@ -119,14 +129,21 @@ export class JobService {
     const fullJob = await this.findJobById(saved.id);
 
     // Enqueue AI embedding in background (non-blocking)
-    this.aiSyncCronService.enqueueJobSync(saved.id).catch((err) =>
-      console.warn('Failed to enqueue AI embedding for job:', err?.message),
-    );
+    this.aiSyncCronService
+      .enqueueJobSync(saved.id)
+      .catch((err) =>
+        console.warn('Failed to enqueue AI embedding for job:', err?.message),
+      );
 
     return fullJob;
   }
 
-  async createDirectHire(employerId: string, postedById: string | null, targetWorkerId: string, dto: Partial<CreateJobDto>): Promise<Job> {
+  async createDirectHire(
+    employerId: string,
+    postedById: string | null,
+    targetWorkerId: string,
+    dto: Partial<CreateJobDto>,
+  ): Promise<Job> {
     const job = this.jobRepository.create({
       ...dto,
       employerId,
@@ -151,7 +168,11 @@ export class JobService {
       targetWorkerId,
       NotificationType.JOB_APPLICATION_RECEIVED,
       saved.id,
-      { jobTitle: saved.title, message: 'Bạn có một yêu cầu Thuê ngay mới!', isDirectHire: true }
+      {
+        jobTitle: saved.title,
+        message: 'Bạn có một yêu cầu Thuê ngay mới!',
+        isDirectHire: true,
+      },
     );
 
     return this.findJobById(saved.id);
@@ -159,15 +180,23 @@ export class JobService {
 
   // ==================== INVITATIONS ====================
 
-  async negotiateDirectHirePrice(jobId: string, userId: string, proposedPrice: number): Promise<JobApplication> {
+  async negotiateDirectHirePrice(
+    jobId: string,
+    userId: string,
+    proposedPrice: number,
+  ): Promise<JobApplication> {
     const job = await this.findJobById(jobId);
     if (!job.isDirectHire) {
       throw new BadRequestException(JOB_ERRORS.JOB_NEGOTIATE_DIRECT_HIRE_ONLY);
     }
 
-    const application = await this.applicationRepository.findOne({ where: { jobId } });
+    const application = await this.applicationRepository.findOne({
+      where: { jobId },
+    });
     if (!application) {
-      throw new NotFoundException(APPLICATION_ERRORS.APPLICATION_NEGOTIATE_NOT_FOUND);
+      throw new NotFoundException(
+        APPLICATION_ERRORS.APPLICATION_NEGOTIATE_NOT_FOUND,
+      );
     }
 
     const isEmployer = job.employerId === userId;
@@ -182,7 +211,7 @@ export class JobService {
     }
 
     // Update job price
-    
+
     if (job.onlinePaymentType === OnlinePaymentType.FIXED_PRICE) {
       job.totalBudget = proposedPrice;
     } else {
@@ -196,11 +225,15 @@ export class JobService {
     } else {
       application.status = ApplicationStatus.PENDING; // Waiting for employer
     }
-    
+
     return this.applicationRepository.save(application);
   }
 
-  async inviteWorkerToJob(employerId: string, jobId: string, workerId: string): Promise<JobInvitation> {
+  async inviteWorkerToJob(
+    employerId: string,
+    jobId: string,
+    workerId: string,
+  ): Promise<JobInvitation> {
     const job = await this.findJobById(jobId);
     if (job.employerId !== employerId) {
       throw new ForbiddenException(JOB_ERRORS.JOB_INVITE_OWNER_ONLY);
@@ -212,7 +245,7 @@ export class JobService {
 
     // Check if invitation already exists
     const existingInv = await this.invitationRepository.findOne({
-      where: { jobId, workerId }
+      where: { jobId, workerId },
     });
 
     if (existingInv) {
@@ -221,11 +254,13 @@ export class JobService {
 
     // Check if worker already applied
     const existingApp = await this.applicationRepository.findOne({
-      where: { jobId, workerId }
+      where: { jobId, workerId },
     });
 
     if (existingApp) {
-      throw new ConflictException(APPLICATION_ERRORS.APPLICATION_ALREADY_APPLIED);
+      throw new ConflictException(
+        APPLICATION_ERRORS.APPLICATION_ALREADY_APPLIED,
+      );
     }
 
     const invitation = this.invitationRepository.create({
@@ -234,29 +269,40 @@ export class JobService {
       employerId,
       status: JobInvitationStatus.PENDING,
     });
-    
+
     const saved = await this.invitationRepository.save(invitation);
 
     await this.notificationHelper.send(
       workerId,
       NotificationType.JOB_APPLICATION_RECEIVED, // Use a suitable notification type
       jobId,
-      { jobTitle: job.title, message: 'You have been invited to apply for a job!' }
+      {
+        jobTitle: job.title,
+        message: 'You have been invited to apply for a job!',
+      },
     );
 
     return saved;
   }
 
-  async respondToInvitation(workerId: string, invitationId: string, accept: boolean): Promise<any> {
+  async respondToInvitation(
+    workerId: string,
+    invitationId: string,
+    accept: boolean,
+  ): Promise<any> {
     const invitation = await this.invitationRepository.findOne({
       where: { id: invitationId },
       relations: ['job'],
     });
 
-    if (!invitation) throw new NotFoundException(JOB_ERRORS.JOB_INVITATION_NOT_FOUND);
-    if (invitation.workerId !== workerId) throw new ForbiddenException(JOB_ERRORS.JOB_INVITATION_FORBIDDEN);
+    if (!invitation)
+      throw new NotFoundException(JOB_ERRORS.JOB_INVITATION_NOT_FOUND);
+    if (invitation.workerId !== workerId)
+      throw new ForbiddenException(JOB_ERRORS.JOB_INVITATION_FORBIDDEN);
     if (invitation.status !== JobInvitationStatus.PENDING) {
-      throw new BadRequestException(JOB_ERRORS.JOB_INVITATION_ALREADY_RESPONDED);
+      throw new BadRequestException(
+        JOB_ERRORS.JOB_INVITATION_ALREADY_RESPONDED,
+      );
     }
 
     if (accept) {
@@ -276,7 +322,10 @@ export class JobService {
         invitation.employerId,
         NotificationType.JOB_APPLICATION_RECEIVED,
         invitation.jobId,
-        { jobTitle: invitation.job.title, message: 'A worker has accepted your job invitation and applied.' }
+        {
+          jobTitle: invitation.job.title,
+          message: 'A worker has accepted your job invitation and applied.',
+        },
       );
 
       return { invitation, application: app };
@@ -440,8 +489,16 @@ export class JobService {
     };
     jobs.sort((a, b) => {
       // 1. Ưu tiên employer đã eKYC lên trước
-      const ekycA = (a.employer?.verificationLevel === VerificationLevel.BASIC || a.employer?.verificationLevel === VerificationLevel.BUSINESS) ? 1 : 0;
-      const ekycB = (b.employer?.verificationLevel === VerificationLevel.BASIC || b.employer?.verificationLevel === VerificationLevel.BUSINESS) ? 1 : 0;
+      const ekycA =
+        a.employer?.verificationLevel === VerificationLevel.BASIC ||
+        a.employer?.verificationLevel === VerificationLevel.BUSINESS
+          ? 1
+          : 0;
+      const ekycB =
+        b.employer?.verificationLevel === VerificationLevel.BASIC ||
+        b.employer?.verificationLevel === VerificationLevel.BUSINESS
+          ? 1
+          : 0;
       if (ekycB !== ekycA) return ekycB - ekycA;
 
       // 2. Ưu tiên tổ chức đã xác thực
@@ -482,9 +539,14 @@ export class JobService {
       );
     }
 
-    this.aiSyncCronService.enqueueJobSync(jobId).catch((err) =>
-      console.warn('Failed to enqueue AI embedding for cancelled job:', err?.message),
-    );
+    this.aiSyncCronService
+      .enqueueJobSync(jobId)
+      .catch((err) =>
+        console.warn(
+          'Failed to enqueue AI embedding for cancelled job:',
+          err?.message,
+        ),
+      );
 
     return saved;
   }
@@ -688,9 +750,11 @@ export class JobService {
     await this.notificationHelper.send(
       application.job.employerId,
       NotificationType.JOB_APPLICATION_ACCEPTED,
-      application.jobId,
+      application.id,
       {
         jobTitle: application.job.title,
+        applicationId: application.id,
+        jobId: application.jobId,
         message: 'Ứng viên đã đồng ý nhận việc. Công việc hiện đã bắt đầu!',
       },
     );
@@ -699,12 +763,14 @@ export class JobService {
       await this.jobRepository.update(application.jobId, {
         status: JobStatus.CLOSED,
       });
-      this.aiSyncCronService.enqueueJobSync(application.jobId).catch((err) =>
-        console.warn(
-          'Failed to enqueue AI embedding for closed job:',
-          err?.message,
-        ),
-      );
+      this.aiSyncCronService
+        .enqueueJobSync(application.jobId)
+        .catch((err) =>
+          console.warn(
+            'Failed to enqueue AI embedding for closed job:',
+            err?.message,
+          ),
+        );
     }
 
     return saved;
@@ -771,13 +837,13 @@ export class JobService {
         'worker.workerProfile',
         'WorkerProfile',
         'workerProfile',
-        'workerProfile.userId = worker.id'
+        'workerProfile.userId = worker.id',
       )
       .leftJoinAndMapOne(
         'app.assignment',
         'JobAssignment',
         'assignment',
-        'assignment.applicationId = app.id'
+        'assignment.applicationId = app.id',
       )
       .where('app.jobId = :jobId', { jobId })
       .orderBy('app.appliedAt', 'DESC')
@@ -843,9 +909,9 @@ export class JobService {
       assignment.job.employerId,
       NotificationType.JOB_CHECKED_IN,
       jobId,
-      { 
+      {
         jobTitle: assignment.job.title,
-        applicationId: assignment.applicationId 
+        applicationId: assignment.applicationId,
       },
     );
 
@@ -857,7 +923,9 @@ export class JobService {
       .createQueryBuilder('assignment')
       .leftJoinAndSelect('assignment.job', 'job')
       .where('assignment.jobId = :jobId', { jobId })
-      .andWhere('(assignment.workerId = :userId OR job.employerId = :userId)', { userId })
+      .andWhere('(assignment.workerId = :userId OR job.employerId = :userId)', {
+        userId,
+      })
       .getOne();
 
     if (!assignment) {
@@ -881,10 +949,11 @@ export class JobService {
         assignment.workerId,
         NotificationType.JOB_COMPLETED,
         jobId,
-        { 
-          jobTitle: assignment.job.title, 
-          message: 'Người thuê đã xác nhận hoàn thành công việc và thanh toán. Vui lòng xác nhận đã nhận đủ tiền.',
-          applicationId: assignment.applicationId
+        {
+          jobTitle: assignment.job.title,
+          message:
+            'Người thuê đã xác nhận hoàn thành công việc và thanh toán. Vui lòng xác nhận đã nhận đủ tiền.',
+          applicationId: assignment.applicationId,
         },
       );
     } else {
@@ -893,10 +962,11 @@ export class JobService {
         assignment.job.employerId,
         NotificationType.JOB_COMPLETED,
         jobId,
-        { 
-          jobTitle: assignment.job.title, 
-          message: 'Người làm đã đánh dấu công việc hoàn thành. Vui lòng kiểm tra và xác nhận thanh toán.',
-          applicationId: assignment.applicationId
+        {
+          jobTitle: assignment.job.title,
+          message:
+            'Người làm đã đánh dấu công việc hoàn thành. Vui lòng kiểm tra và xác nhận thanh toán.',
+          applicationId: assignment.applicationId,
         },
       );
     }
@@ -916,7 +986,10 @@ export class JobService {
     }
 
     // Block completing ONLINE + ESCROW jobs if escrow is not funded
-    if (job.jobType === JobType.ONLINE && (job as any).paymentMethod === PaymentMethod.ESCROW) {
+    if (
+      job.jobType === JobType.ONLINE &&
+      (job as any).paymentMethod === PaymentMethod.ESCROW
+    ) {
       const escrow = await this.escrowRepository.findOne({ where: { jobId } });
       if (!escrow || escrow.status === EscrowStatus.PENDING) {
         throw new BadRequestException(ESCROW_ERRORS.ESCROW_NOT_FUNDED);
@@ -929,7 +1002,9 @@ export class JobService {
 
     // Also mark assignments as PAYMENT_SENT if Employer completes first
     // This allows the Worker to confirm receipt of money (P2P) or confirm completion (Escrow)
-    const assignments = await this.assignmentRepository.find({ where: { jobId } });
+    const assignments = await this.assignmentRepository.find({
+      where: { jobId },
+    });
     for (const assignment of assignments) {
       if (
         assignment.status === AssignmentStatus.ASSIGNED ||
@@ -1033,8 +1108,14 @@ export class JobService {
       salaryType: application.job.salaryType,
       totalBudget: application.job.totalBudget,
       onlinePaymentType: application.job.onlinePaymentType,
-      startTime: application.job.startTime || application.job.deadline || application.job.createdAt,
-      endTime: application.job.endTime || application.job.deadline || application.job.createdAt,
+      startTime:
+        application.job.startTime ||
+        application.job.deadline ||
+        application.job.createdAt,
+      endTime:
+        application.job.endTime ||
+        application.job.deadline ||
+        application.job.createdAt,
       salaryPerHour: application.job.salaryPerHour || 0,
       currentStep,
       steps,
@@ -1280,11 +1361,15 @@ export class JobService {
 
   // ==================== HOURLY PAYMENT WORKFLOW ====================
 
-  async logHours(jobId: string, userId: string, loggedHours: number): Promise<JobAssignment> {
+  async logHours(
+    jobId: string,
+    userId: string,
+    loggedHours: number,
+  ): Promise<JobAssignment> {
     const assignment = await this.assignmentRepository.findOne({
-      where: { 
-        jobId, 
-        status: In([AssignmentStatus.IN_PROGRESS, AssignmentStatus.ASSIGNED]) 
+      where: {
+        jobId,
+        status: In([AssignmentStatus.IN_PROGRESS, AssignmentStatus.ASSIGNED]),
       },
       relations: ['job'],
     });
@@ -1293,8 +1378,13 @@ export class JobService {
       throw new BadRequestException(APPLICATION_ERRORS.ASSIGNMENT_NOT_ACTIVE);
     }
 
-    if (assignment.workerId !== userId && assignment.job.employerId !== userId) {
-      throw new ForbiddenException(APPLICATION_ERRORS.ASSIGNMENT_NOT_PARTICIPANT);
+    if (
+      assignment.workerId !== userId &&
+      assignment.job.employerId !== userId
+    ) {
+      throw new ForbiddenException(
+        APPLICATION_ERRORS.ASSIGNMENT_NOT_PARTICIPANT,
+      );
     }
 
     assignment.loggedHours = loggedHours;
@@ -1304,15 +1394,18 @@ export class JobService {
     await this.assignmentRepository.save(assignment);
 
     // Notify the other party
-    const targetUserId = userId === assignment.workerId ? assignment.job.employerId : assignment.workerId;
+    const targetUserId =
+      userId === assignment.workerId
+        ? assignment.job.employerId
+        : assignment.workerId;
     await this.notificationHelper.send(
       targetUserId,
       NotificationType.JOB_COMPLETED,
       assignment.jobId,
-      { 
-        jobTitle: assignment.job.title, 
-        message: `Số giờ thực tế đã làm cho công việc "${assignment.job.title}" là ${loggedHours} giờ. Vui lòng xác nhận.` 
-      }
+      {
+        jobTitle: assignment.job.title,
+        message: `Số giờ thực tế đã làm cho công việc "${assignment.job.title}" là ${loggedHours} giờ. Vui lòng xác nhận.`,
+      },
     );
 
     return assignment;
@@ -1325,15 +1418,24 @@ export class JobService {
     });
 
     if (!assignment) {
-      throw new BadRequestException(APPLICATION_ERRORS.ASSIGNMENT_NOT_PENDING_HOURS);
+      throw new BadRequestException(
+        APPLICATION_ERRORS.ASSIGNMENT_NOT_PENDING_HOURS,
+      );
     }
 
     if (assignment.hoursSubmittedBy === userId) {
-      throw new BadRequestException(APPLICATION_ERRORS.ASSIGNMENT_CONFIRM_OWN_HOURS);
+      throw new BadRequestException(
+        APPLICATION_ERRORS.ASSIGNMENT_CONFIRM_OWN_HOURS,
+      );
     }
 
-    if (assignment.workerId !== userId && assignment.job.employerId !== userId) {
-      throw new ForbiddenException(APPLICATION_ERRORS.ASSIGNMENT_NOT_PARTICIPANT);
+    if (
+      assignment.workerId !== userId &&
+      assignment.job.employerId !== userId
+    ) {
+      throw new ForbiddenException(
+        APPLICATION_ERRORS.ASSIGNMENT_NOT_PARTICIPANT,
+      );
     }
 
     // Check payment method. Note: If paymentMethod isn't explicitly P2P, we default to P2P logic here unless ESCROW is defined.
@@ -1354,10 +1456,10 @@ export class JobService {
       assignment.hoursSubmittedBy,
       NotificationType.JOB_COMPLETED,
       assignment.jobId,
-      { 
+      {
         jobTitle: assignment.job.title,
-        message: `Số giờ làm việc cho công việc "${assignment.job.title}" đã được xác nhận.`
-      }
+        message: `Số giờ làm việc cho công việc "${assignment.job.title}" đã được xác nhận.`,
+      },
     );
 
     return assignment;
@@ -1370,11 +1472,15 @@ export class JobService {
     });
 
     if (!assignment) {
-      throw new BadRequestException(APPLICATION_ERRORS.ASSIGNMENT_NOT_PENDING_PAYMENT);
+      throw new BadRequestException(
+        APPLICATION_ERRORS.ASSIGNMENT_NOT_PENDING_PAYMENT,
+      );
     }
 
     if (assignment.job.employerId !== userId) {
-      throw new ForbiddenException(APPLICATION_ERRORS.ASSIGNMENT_MARK_PAID_EMPLOYER_ONLY);
+      throw new ForbiddenException(
+        APPLICATION_ERRORS.ASSIGNMENT_MARK_PAID_EMPLOYER_ONLY,
+      );
     }
 
     // For ESCROW jobs, markPaid means Employer confirms the work is done, so we skip PAYMENT_SENT and go straight to COMPLETED.
@@ -1387,34 +1493,41 @@ export class JobService {
     } else {
       assignment.status = AssignmentStatus.PAYMENT_SENT;
     }
-    
+
     await this.assignmentRepository.save(assignment);
 
     await this.notificationHelper.send(
       assignment.workerId,
       NotificationType.JOB_COMPLETED,
       assignment.jobId,
-      { 
+      {
         jobTitle: assignment.job.title,
-        message: `Khách hàng báo đã thanh toán cho công việc "${assignment.job.title}". Vui lòng kiểm tra và xác nhận.`
-      }
+        message: `Khách hàng báo đã thanh toán cho công việc "${assignment.job.title}". Vui lòng kiểm tra và xác nhận.`,
+      },
     );
 
     return assignment;
   }
 
-  async confirmPaymentReceipt(jobId: string, userId: string): Promise<JobAssignment> {
+  async confirmPaymentReceipt(
+    jobId: string,
+    userId: string,
+  ): Promise<JobAssignment> {
     const assignment = await this.assignmentRepository.findOne({
       where: { jobId, status: AssignmentStatus.PAYMENT_SENT },
       relations: ['job'],
     });
 
     if (!assignment) {
-      throw new BadRequestException(APPLICATION_ERRORS.ASSIGNMENT_PAYMENT_NOT_SENT);
+      throw new BadRequestException(
+        APPLICATION_ERRORS.ASSIGNMENT_PAYMENT_NOT_SENT,
+      );
     }
 
     if (assignment.workerId !== userId) {
-      throw new ForbiddenException(APPLICATION_ERRORS.ASSIGNMENT_CONFIRM_RECEIPT_WORKER_ONLY);
+      throw new ForbiddenException(
+        APPLICATION_ERRORS.ASSIGNMENT_CONFIRM_RECEIPT_WORKER_ONLY,
+      );
     }
 
     assignment.status = AssignmentStatus.COMPLETED;
@@ -1436,11 +1549,11 @@ export class JobService {
       assignment.job.employerId,
       NotificationType.JOB_COMPLETED,
       assignment.jobId,
-      { 
+      {
         jobTitle: assignment.job.title,
         message: `Người làm đã xác nhận nhận đủ thanh toán. Công việc "${assignment.job.title}" đã hoàn thành!`,
-        applicationId: assignment.applicationId
-      }
+        applicationId: assignment.applicationId,
+      },
     );
 
     return assignment;

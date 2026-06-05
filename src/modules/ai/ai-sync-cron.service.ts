@@ -1,4 +1,9 @@
-import { Injectable, Logger, InternalServerErrorException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  InternalServerErrorException,
+  BadRequestException,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bull';
 import Bull from 'bull';
@@ -83,7 +88,11 @@ export class AiSyncCronService {
     await this.embeddingQueue.add(
       EmbeddingJobName.SYNC_GRAPH_JOB,
       { jobId },
-      { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, removeOnComplete: true },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: true,
+      },
     );
     this.logger.debug(`Enqueued SYNC_GRAPH_JOB for ${jobId}`);
   }
@@ -93,7 +102,11 @@ export class AiSyncCronService {
     await this.embeddingQueue.add(
       EmbeddingJobName.SYNC_GRAPH_WORKER,
       { workerServiceId },
-      { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, removeOnComplete: true },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: true,
+      },
     );
     this.logger.debug(`Enqueued SYNC_GRAPH_WORKER for ${workerServiceId}`);
   }
@@ -119,8 +132,12 @@ export class AiSyncCronService {
     );
 
     if (isAlreadyQueued) {
-      this.logger.warn('BATCH_SYNC_ALL is already in queue or processing. Skipping.');
-      throw new BadRequestException('Tiến trình đồng bộ đang chạy. Vui lòng đợi trong giây lát...');
+      this.logger.warn(
+        'BATCH_SYNC_ALL is already in queue or processing. Skipping.',
+      );
+      throw new BadRequestException(
+        'Tiến trình đồng bộ đang chạy. Vui lòng đợi trong giây lát...',
+      );
     }
 
     await this.embeddingQueue.add(
@@ -158,7 +175,9 @@ export class AiSyncCronService {
         j.name === EmbeddingJobName.BATCH_SYNC_SELECTIVE,
     );
     if (isRunning) {
-      throw new BadRequestException('Tiến trình đồng bộ đang chạy. Vui lòng đợi trong giây lát...');
+      throw new BadRequestException(
+        'Tiến trình đồng bộ đang chạy. Vui lòng đợi trong giây lát...',
+      );
     }
 
     await this.embeddingQueue.add(
@@ -167,7 +186,9 @@ export class AiSyncCronService {
       { attempts: 1, removeOnComplete: true, removeOnFail: false },
     );
 
-    this.logger.log(`Enqueued BATCH_SYNC_SELECTIVE — targets: [${unique.join(', ')}]`);
+    this.logger.log(
+      `Enqueued BATCH_SYNC_SELECTIVE — targets: [${unique.join(', ')}]`,
+    );
     return {
       message: `Đã đưa yêu cầu đồng bộ vào hàng đợi.`,
       targets: unique,
@@ -195,7 +216,12 @@ export class AiSyncCronService {
       this.embeddingQueue.getFailed(),
     ]);
 
-    const mapJob = (j: Bull.Job) => ({ id: j.id, name: j.name, data: j.data, status: j.finishedOn ? 'completed' : 'unknown' });
+    const mapJob = (j: Bull.Job) => ({
+      id: j.id,
+      name: j.name,
+      data: j.data,
+      status: j.finishedOn ? 'completed' : 'unknown',
+    });
 
     return {
       waiting: waiting.map(mapJob),

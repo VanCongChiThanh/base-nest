@@ -86,4 +86,3 @@ export class InternalServerErrorException extends BusinessException {
     super(error, HttpStatus.INTERNAL_SERVER_ERROR);
   }
 }
-

@@ -174,7 +174,9 @@ export class AiDbInitService implements OnApplicationBootstrap {
 
       const deleted = Array.isArray(result) ? result.length : 0;
       if (deleted > 0) {
-        this.logger.warn(`Cleaned up ${deleted} duplicate embedding row(s) — one fresh record kept per source`);
+        this.logger.warn(
+          `Cleaned up ${deleted} duplicate embedding row(s) — one fresh record kept per source`,
+        );
       } else {
         this.logger.debug('No duplicate embeddings found');
       }

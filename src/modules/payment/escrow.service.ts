@@ -9,10 +9,11 @@ import {
   NotificationType,
   JobType,
   JobStatus,
-  AssignmentStatus,
+  Role,
 } from '../../common/enums';
 import payosConfig from '../../config/payos.config';
 import { Job, JobAssignment } from '../job/entities';
+import { User } from '../user/entities';
 import { NotificationHelper } from '../notification';
 import {
   BadRequestException,
@@ -52,13 +53,19 @@ export class EscrowService {
     private readonly jobRepo: Repository<Job>,
     @InjectRepository(JobAssignment)
     private readonly assignmentRepo: Repository<JobAssignment>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly notificationHelper: NotificationHelper,
     private readonly dataSource: DataSource,
   ) {}
 
   private getPayOSClient(): PayOS {
     if (!this.payosClient) {
-      if (!this.payosConf.clientId || !this.payosConf.apiKey || !this.payosConf.checksumKey) {
+      if (
+        !this.payosConf.clientId ||
+        !this.payosConf.apiKey ||
+        !this.payosConf.checksumKey
+      ) {
         throw new BadRequestException(SUBSCRIPTION_ERRORS.PAYMENT_CONFIG_ERROR);
       }
       this.payosClient = new PayOS({
@@ -90,7 +97,9 @@ export class EscrowService {
     }
 
     // Kiểm tra đã có escrow chưa
-    const existing = await this.escrowRepo.findOne({ where: { jobId: dto.jobId } });
+    const existing = await this.escrowRepo.findOne({
+      where: { jobId: dto.jobId },
+    });
     if (existing) {
       if (existing.status === EscrowStatus.PENDING) {
         await this.escrowRepo.remove(existing);
@@ -105,7 +114,8 @@ export class EscrowService {
 
     // Tạo order code unique
     const orderCode = Number(
-      String(Date.now()).slice(-7) + String(Math.floor(Math.random() * 100)).padStart(2, '0'),
+      String(Date.now()).slice(-7) +
+        String(Math.floor(Math.random() * 100)).padStart(2, '0'),
     );
 
     const escrow = this.escrowRepo.create({
@@ -165,7 +175,10 @@ export class EscrowService {
         })),
       };
     } catch (error) {
-      this.logger.error('Failed to create PayOS payment link for escrow', error);
+      this.logger.error(
+        'Failed to create PayOS payment link for escrow',
+        error,
+      );
       await this.escrowRepo.remove(savedEscrow);
       throw new BadRequestException(ESCROW_ERRORS.ESCROW_PAYOS_ERROR);
     }
@@ -177,7 +190,10 @@ export class EscrowService {
    * Gọi từ webhook khi PayOS xác nhận employer đã thanh toán
    * orderCode → identify escrow vs subscription bằng cách tra DB
    */
-  async handleEscrowDeposit(orderCode: number, amountReceived?: number): Promise<boolean> {
+  async handleEscrowDeposit(
+    orderCode: number,
+    amountReceived?: number,
+  ): Promise<boolean> {
     const escrow = await this.escrowRepo.findOne({
       where: { payosOrderCode: orderCode },
       relations: ['job'],
@@ -185,12 +201,19 @@ export class EscrowService {
     if (!escrow) return false; // Không phải escrow deposit
 
     if (escrow.status === EscrowStatus.FUNDED) {
-      this.logger.warn(`Escrow ${escrow.id} already funded, ignoring duplicate webhook`);
+      this.logger.warn(
+        `Escrow ${escrow.id} already funded, ignoring duplicate webhook`,
+      );
       return true;
     }
 
-    if (amountReceived !== undefined && amountReceived < Number(escrow.totalAmount)) {
-      this.logger.warn(`Escrow ${escrow.id} underpaid. Expected ${escrow.totalAmount}, received ${amountReceived}`);
+    if (
+      amountReceived !== undefined &&
+      amountReceived < Number(escrow.totalAmount)
+    ) {
+      this.logger.warn(
+        `Escrow ${escrow.id} underpaid. Expected ${escrow.totalAmount}, received ${amountReceived}`,
+      );
       return true; // Return true to ack webhook but do NOT fund it
     }
 
@@ -225,9 +248,12 @@ export class EscrowService {
    * Sync PayOS status cho escrow (polling fallback)
    */
   async syncEscrowDepositStatus(orderCode: number) {
-    const escrow = await this.escrowRepo.findOne({ where: { payosOrderCode: orderCode } });
+    const escrow = await this.escrowRepo.findOne({
+      where: { payosOrderCode: orderCode },
+    });
     if (!escrow) throw new NotFoundException(ESCROW_ERRORS.ESCROW_NOT_FOUND);
-    if (escrow.status === EscrowStatus.FUNDED) return { status: 'FUNDED', escrowId: escrow.id };
+    if (escrow.status === EscrowStatus.FUNDED)
+      return { status: 'FUNDED', escrowId: escrow.id };
 
     const payos = this.getPayOSClient();
     try {
@@ -238,15 +264,23 @@ export class EscrowService {
       }
       return { status: paymentLink.status, escrowId: escrow.id };
     } catch (error) {
-      this.logger.error(`Failed to sync PayOS escrow order ${orderCode}`, error);
+      this.logger.error(
+        `Failed to sync PayOS escrow order ${orderCode}`,
+        error,
+      );
       return { status: 'UNKNOWN', escrowId: escrow.id };
     }
   }
 
   // ==================== GET ESCROW ====================
 
-  async getAdminMilestones(page: number = 1, limit: number = 10, status?: string) {
-    const query = this.milestoneRepo.createQueryBuilder('milestone')
+  async getAdminMilestones(
+    page: number = 1,
+    limit: number = 10,
+    status?: string,
+  ) {
+    const query = this.milestoneRepo
+      .createQueryBuilder('milestone')
       .leftJoinAndSelect('milestone.escrow', 'escrow')
       .leftJoinAndSelect('escrow.job', 'job')
       .leftJoinAndSelect('milestone.worker', 'worker')
@@ -288,18 +322,25 @@ export class EscrowService {
     });
     if (!escrow) throw new NotFoundException(ESCROW_ERRORS.ESCROW_NOT_FOUND);
 
-    escrow.milestones = escrow.milestones.sort((a, b) => a.orderIndex - b.orderIndex);
+    escrow.milestones = escrow.milestones.sort(
+      (a, b) => a.orderIndex - b.orderIndex,
+    );
     return escrow;
   }
 
   // ==================== WORKER: NỘP DELIVERABLE ====================
 
-  async submitMilestone(milestoneId: string, workerId: string, dto: SubmitMilestoneDto) {
+  async submitMilestone(
+    milestoneId: string,
+    workerId: string,
+    dto: SubmitMilestoneDto,
+  ) {
     const milestone = await this.milestoneRepo.findOne({
       where: { id: milestoneId },
       relations: ['escrow', 'escrow.job'],
     });
-    if (!milestone) throw new NotFoundException(MILESTONE_ERRORS.MILESTONE_NOT_FOUND);
+    if (!milestone)
+      throw new NotFoundException(MILESTONE_ERRORS.MILESTONE_NOT_FOUND);
     if (milestone.escrow.status !== EscrowStatus.FUNDED) {
       throw new BadRequestException(ESCROW_ERRORS.ESCROW_NOT_FUNDED);
     }
@@ -342,12 +383,17 @@ export class EscrowService {
 
   // ==================== EMPLOYER: DUYỆT / YÊU CẦU SỬA ====================
 
-  async reviewMilestone(milestoneId: string, employerId: string, dto: ReviewMilestoneDto) {
+  async reviewMilestone(
+    milestoneId: string,
+    employerId: string,
+    dto: ReviewMilestoneDto,
+  ) {
     const milestone = await this.milestoneRepo.findOne({
       where: { id: milestoneId },
       relations: ['escrow', 'escrow.job'],
     });
-    if (!milestone) throw new NotFoundException(MILESTONE_ERRORS.MILESTONE_NOT_FOUND);
+    if (!milestone)
+      throw new NotFoundException(MILESTONE_ERRORS.MILESTONE_NOT_FOUND);
     if (milestone.escrow.employerId !== employerId) {
       throw new ForbiddenException(MILESTONE_ERRORS.MILESTONE_ACCESS_FORBIDDEN);
     }
@@ -402,14 +448,21 @@ export class EscrowService {
 
   // ==================== ADMIN: GIẢI NGÂN ====================
 
-  async releaseMilestonePayment(milestoneId: string, adminId: string, dto: ReleaseMilestoneDto) {
+  async releaseMilestonePayment(
+    milestoneId: string,
+    adminId: string,
+    dto: ReleaseMilestoneDto,
+  ) {
     const milestone = await this.milestoneRepo.findOne({
       where: { id: milestoneId },
       relations: ['escrow', 'escrow.job'],
     });
-    if (!milestone) throw new NotFoundException(MILESTONE_ERRORS.MILESTONE_NOT_FOUND);
+    if (!milestone)
+      throw new NotFoundException(MILESTONE_ERRORS.MILESTONE_NOT_FOUND);
     if (milestone.status === MilestoneStatus.RELEASED) {
-      throw new BadRequestException(MILESTONE_ERRORS.MILESTONE_ALREADY_RELEASED);
+      throw new BadRequestException(
+        MILESTONE_ERRORS.MILESTONE_ALREADY_RELEASED,
+      );
     }
     if (milestone.status !== MilestoneStatus.APPROVED) {
       throw new BadRequestException(MILESTONE_ERRORS.MILESTONE_WRONG_STATUS);
@@ -422,18 +475,26 @@ export class EscrowService {
 
     // Cập nhật released_amount trên escrow
     const escrow = milestone.escrow;
-    escrow.releasedAmount = Number(escrow.releasedAmount) + Number(milestone.amount);
+    escrow.releasedAmount =
+      Number(escrow.releasedAmount) + Number(milestone.amount);
 
     // Kiểm tra có phải milestone cuối cùng không
-    const allMilestones = await this.milestoneRepo.find({ where: { escrowId: escrow.id } });
+    const allMilestones = await this.milestoneRepo.find({
+      where: { escrowId: escrow.id },
+    });
     const allReleased = allMilestones.every(
       (m) => m.id === milestoneId || m.status === MilestoneStatus.RELEASED,
     );
-    escrow.status = allReleased ? EscrowStatus.FULLY_RELEASED : EscrowStatus.PARTIALLY_RELEASED;
+    escrow.status = allReleased
+      ? EscrowStatus.FULLY_RELEASED
+      : EscrowStatus.PARTIALLY_RELEASED;
     await this.escrowRepo.save(escrow);
 
     if (allReleased) {
-      await this.jobRepo.update({ id: escrow.jobId }, { status: JobStatus.SETTLED as any });
+      await this.jobRepo.update(
+        { id: escrow.jobId },
+        { status: JobStatus.SETTLED },
+      );
     }
 
     // Notify worker
@@ -503,7 +564,10 @@ export class EscrowService {
       relations: ['milestones', 'job'],
     });
     if (!escrow) throw new NotFoundException(ESCROW_ERRORS.ESCROW_NOT_FOUND);
-    if (escrow.status !== EscrowStatus.FUNDED && escrow.status !== EscrowStatus.PARTIALLY_RELEASED) {
+    if (
+      escrow.status !== EscrowStatus.FUNDED &&
+      escrow.status !== EscrowStatus.PARTIALLY_RELEASED
+    ) {
       throw new BadRequestException(ESCROW_ERRORS.ESCROW_NOT_FUNDED);
     }
 
@@ -553,7 +617,8 @@ export class EscrowService {
       where: { id: milestoneId },
       relations: ['escrow'],
     });
-    if (!milestone) throw new NotFoundException(MILESTONE_ERRORS.MILESTONE_NOT_FOUND);
+    if (!milestone)
+      throw new NotFoundException(MILESTONE_ERRORS.MILESTONE_NOT_FOUND);
     if (milestone.escrow.employerId !== employerId) {
       throw new ForbiddenException(MILESTONE_ERRORS.MILESTONE_ACCESS_FORBIDDEN);
     }
@@ -576,16 +641,115 @@ export class EscrowService {
   // ==================== WORKER: XÁC NHẬN ĐÃ NHẬN TIỀN ====================
 
   async confirmMilestoneReceipt(milestoneId: string, workerId: string) {
-    const milestone = await this.milestoneRepo.findOne({ where: { id: milestoneId } });
-    if (!milestone) throw new NotFoundException(MILESTONE_ERRORS.MILESTONE_NOT_FOUND);
-    if (milestone.workerId !== workerId) throw new ForbiddenException(MILESTONE_ERRORS.MILESTONE_ACCESS_FORBIDDEN);
+    const milestone = await this.milestoneRepo.findOne({
+      where: { id: milestoneId },
+    });
+    if (!milestone)
+      throw new NotFoundException(MILESTONE_ERRORS.MILESTONE_NOT_FOUND);
+    if (milestone.workerId !== workerId)
+      throw new ForbiddenException(MILESTONE_ERRORS.MILESTONE_ACCESS_FORBIDDEN);
     if (milestone.status !== MilestoneStatus.RELEASED) {
       throw new BadRequestException(MILESTONE_ERRORS.MILESTONE_WRONG_STATUS);
     }
-    
+    if (milestone.workerReceivedAt) {
+      throw new BadRequestException(
+        MILESTONE_ERRORS.MILESTONE_RECEIPT_ALREADY_CONFIRMED,
+      );
+    }
+
     milestone.workerReceivedAt = new Date();
     await this.milestoneRepo.save(milestone);
-    
+
     return milestone;
+  }
+
+  // ==================== WORKER: LẤY DANH SÁCH MILESTONES CỦA MÌNH ====================
+
+  async getWorkerMilestones(
+    workerId: string,
+    page = 1,
+    limit = 10,
+    status?: string,
+  ) {
+    const query = this.milestoneRepo
+      .createQueryBuilder('milestone')
+      .leftJoinAndSelect('milestone.escrow', 'escrow')
+      .leftJoinAndSelect('escrow.job', 'job')
+      .where('milestone.workerId = :workerId', { workerId })
+      .orderBy('milestone.createdAt', 'DESC');
+
+    if (status) {
+      query.andWhere('milestone.status = :status', { status });
+    }
+
+    const [milestones, total] = await query
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    const data = milestones.map((milestone) => ({
+      ...milestone,
+      escrow: milestone.escrow
+        ? {
+            id: milestone.escrow.id,
+            jobId: milestone.escrow.jobId,
+            status: milestone.escrow.status,
+            totalAmount: milestone.escrow.totalAmount,
+            releasedAmount: milestone.escrow.releasedAmount,
+            job: milestone.escrow.job
+              ? {
+                  id: milestone.escrow.job.id,
+                  title: milestone.escrow.job.title,
+                  status: milestone.escrow.job.status,
+                }
+              : null,
+          }
+        : null,
+    }));
+
+    return { data, total, page, limit };
+  }
+
+  // ==================== WORKER: BÁO CÁO CHƯA NHẬN TIỀN ====================
+
+  async reportMilestoneNotReceived(milestoneId: string, workerId: string) {
+    const milestone = await this.milestoneRepo.findOne({
+      where: { id: milestoneId },
+      relations: ['escrow', 'escrow.job'],
+    });
+    if (!milestone)
+      throw new NotFoundException(MILESTONE_ERRORS.MILESTONE_NOT_FOUND);
+    if (milestone.workerId !== workerId)
+      throw new ForbiddenException(MILESTONE_ERRORS.MILESTONE_ACCESS_FORBIDDEN);
+    if (milestone.status !== MilestoneStatus.RELEASED) {
+      throw new BadRequestException(MILESTONE_ERRORS.MILESTONE_WRONG_STATUS);
+    }
+    if (milestone.workerReceivedAt) {
+      throw new BadRequestException(
+        MILESTONE_ERRORS.MILESTONE_RECEIPT_ALREADY_CONFIRMED,
+      );
+    }
+
+    // Notify all admins
+    const admins = await this.userRepo.find({ where: { role: Role.ADMIN } });
+    for (const admin of admins) {
+      await this.notificationHelper.send(
+        admin.id,
+        NotificationType.MILESTONE_NOT_RECEIVED,
+        milestoneId,
+        {
+          milestoneTitle: milestone.title,
+          amount: milestone.amount,
+          jobTitle: milestone.escrow?.job?.title ?? '',
+          jobId: milestone.escrow?.jobId,
+          workerId,
+        },
+      );
+    }
+
+    this.logger.log(
+      `Worker ${workerId} reported milestone ${milestoneId} not received`,
+    );
+    return { success: true };
   }
 }

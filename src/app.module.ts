@@ -78,7 +78,7 @@ import { WorkerServiceModule } from './modules/worker-service/worker-service.mod
         logging: dbConf.logging,
       }),
     }),
-    
+
     // Bull Queue - dùng Redis cho async embedding jobs
     BullModule.forRootAsync({
       inject: [redisConfig.KEY],

@@ -50,12 +50,11 @@ export class GeminiService {
   /**
    * Generate text content from a prompt as an async iterable stream
    */
-  async generateContentStream(
-    prompt: string,
-    systemInstruction?: string,
-  ) {
+  async generateContentStream(prompt: string, systemInstruction?: string) {
     if (!this.isAvailable) {
-      throw new Error('AI service is not configured. Please set GEMINI_API_KEY.');
+      throw new Error(
+        'AI service is not configured. Please set GEMINI_API_KEY.',
+      );
     }
 
     return this.ai.models.generateContentStream({
@@ -93,16 +92,16 @@ export class GeminiService {
     const batchSize = 5;
     for (let i = 0; i < texts.length; i += batchSize) {
       const batch = texts.slice(i, i + batchSize);
-      
-      const response = await this.withRetry(() => 
+
+      const response = await this.withRetry(() =>
         this.ai.models.embedContent({
           model: this.config.embeddingModel,
           contents: batch,
           config: { outputDimensionality: this.config.embeddingDimension },
-        })
+        }),
       );
-      
-      const batchValues = response.embeddings?.map(e => e.values || []) || [];
+
+      const batchValues = response.embeddings?.map((e) => e.values || []) || [];
       results.push(...batchValues);
 
       // Small delay between batches to avoid rate limiting

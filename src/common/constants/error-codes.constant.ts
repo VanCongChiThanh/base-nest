@@ -610,7 +610,8 @@ export const SUBSCRIPTION_ERRORS = {
   },
   PAYMENT_CONFIG_ERROR: {
     code: 'PAYMENT_CONFIG_ERROR',
-    message: 'PayOS credentials are not configured. Set PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY.',
+    message:
+      'PayOS credentials are not configured. Set PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY.',
   },
   WEBHOOK_INVALID: {
     code: 'SUBSCRIPTION_WEBHOOK_INVALID',
@@ -634,7 +635,8 @@ export const ESCROW_ERRORS = {
   },
   ESCROW_NOT_FUNDED: {
     code: 'ESCROW_NOT_FUNDED',
-    message: 'Employer chưa ký quỹ đủ tiền. Worker cần đợi employer thanh toán.',
+    message:
+      'Employer chưa ký quỹ đủ tiền. Worker cần đợi employer thanh toán.',
   },
   ESCROW_ALREADY_FUNDED: {
     code: 'ESCROW_ALREADY_FUNDED',
@@ -672,6 +674,10 @@ export const MILESTONE_ERRORS = {
     code: 'MILESTONE_ALREADY_RELEASED',
     message: 'Milestone này đã được giải ngân',
   },
+  MILESTONE_RECEIPT_ALREADY_CONFIRMED: {
+    code: 'MILESTONE_RECEIPT_ALREADY_CONFIRMED',
+    message: 'Bạn đã xác nhận nhận tiền trước đó.',
+  },
   MILESTONE_LIMIT_EXCEEDED: {
     code: 'MILESTONE_LIMIT_EXCEEDED',
     message: 'Vui lòng nhập ít nhất 1 milestone',
@@ -698,7 +704,8 @@ export const WORKER_SERVICE_ERRORS = {
   },
   WORKER_SERVICE_LIMIT_REACHED: {
     code: 'WORKER_SERVICE_LIMIT_REACHED',
-    message: 'Your current plan allows only a limited number of active service profiles',
+    message:
+      'Your current plan allows only a limited number of active service profiles',
   },
 } as const;
 
@@ -733,7 +740,7 @@ export const ERROR_CODES = {
 export type ErrorCode = keyof typeof ERROR_CODES;
 
 // Helper type for error definition strictly verified against defined error codes
-export type ErrorDefinition = typeof ERROR_CODES[keyof typeof ERROR_CODES];
+export type ErrorDefinition = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
 
 /**
  * Get error definition by error code

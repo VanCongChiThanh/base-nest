@@ -85,7 +85,13 @@ const SCAM_PATTERN_SEEDS = [
     name: 'Yêu cầu đặt cọc',
     description:
       'Nhà tuyển dụng yêu cầu ứng viên đặt cọc tiền trước khi được nhận việc. Đây là hình thức lừa đảo phổ biến nhất.',
-    indicators: ['đặt cọc', 'tiền cọc', 'phí giữ chỗ', 'chuyển khoản trước', 'đóng phí'],
+    indicators: [
+      'đặt cọc',
+      'tiền cọc',
+      'phí giữ chỗ',
+      'chuyển khoản trước',
+      'đóng phí',
+    ],
     severity: 'critical',
     exampleText:
       'Tuyển nhân viên bán hàng, lương 15-20 triệu/tháng. Yêu cầu đặt cọc 500.000₫ để giữ chỗ. Liên hệ Zalo: 0901234567',
@@ -95,7 +101,14 @@ const SCAM_PATTERN_SEEDS = [
     name: 'Thu thập thông tin nhạy cảm',
     description:
       'Lấy cớ tuyển dụng để thu thập thông tin cá nhân nhạy cảm (CMND, STK, mật khẩu) của ứng viên.',
-    indicators: ['số CMND', 'CCCD', 'số tài khoản', 'mật khẩu', 'OTP', 'mã xác nhận'],
+    indicators: [
+      'số CMND',
+      'CCCD',
+      'số tài khoản',
+      'mật khẩu',
+      'OTP',
+      'mã xác nhận',
+    ],
     severity: 'critical',
     exampleText:
       'Tuyển CTV online, làm tại nhà. Gửi CMND 2 mặt + ảnh selfie + số tài khoản để xác minh. Thu nhập 200-500k/ngày.',
@@ -209,9 +222,7 @@ export class AiSeedService implements OnModuleInit {
    */
   private async ensureVectorExtension(): Promise<void> {
     try {
-      await this.dataSource.query(
-        'CREATE EXTENSION IF NOT EXISTS vector',
-      );
+      await this.dataSource.query('CREATE EXTENSION IF NOT EXISTS vector');
       this.logger.log('✅ pgvector extension enabled');
     } catch (error) {
       this.logger.warn(
@@ -239,8 +250,12 @@ export class AiSeedService implements OnModuleInit {
         );
 
         if (colCheck.length > 0 && colCheck[0].data_type === 'text') {
-          await this.dataSource.query(`ALTER TABLE "${table}" DROP COLUMN IF EXISTS "${column}"`);
-          await this.dataSource.query(`ALTER TABLE "${table}" ADD COLUMN "${column}" vector(768)`);
+          await this.dataSource.query(
+            `ALTER TABLE "${table}" DROP COLUMN IF EXISTS "${column}"`,
+          );
+          await this.dataSource.query(
+            `ALTER TABLE "${table}" ADD COLUMN "${column}" vector(768)`,
+          );
           this.logger.log(`✅ Converted ${table}.${column} to vector(768)`);
         } else if (colCheck.length === 0) {
           await this.dataSource.query(
@@ -256,7 +271,9 @@ export class AiSeedService implements OnModuleInit {
           `CREATE INDEX IF NOT EXISTS idx_graph_knowledge_embedding
            ON graph_knowledge USING ivfflat (embedding vector_cosine_ops) WITH (lists = 10)`,
         )
-        .catch(() => this.logger.log('IVFFlat index deferred (needs data first)'));
+        .catch(() =>
+          this.logger.log('IVFFlat index deferred (needs data first)'),
+        );
 
       await this.dataSource
         .query(
@@ -273,7 +290,9 @@ export class AiSeedService implements OnModuleInit {
    * Seed FAQ/guide/policy into graph_knowledge (unified table)
    */
   private async seedKnowledgeBase(): Promise<void> {
-    this.logger.log('📚 Verifying and seeding FAQ/guide/policy into graph_knowledge...');
+    this.logger.log(
+      '📚 Verifying and seeding FAQ/guide/policy into graph_knowledge...',
+    );
 
     for (const faq of FAQ_SEEDS) {
       const sourceId = `faq_${faq.title.toLowerCase().replace(/\s+/g, '_').slice(0, 60)}`;
@@ -322,7 +341,9 @@ export class AiSeedService implements OnModuleInit {
   private async seedScamPatterns(): Promise<void> {
     const existing = await this.scamPatternRepo.count();
     if (existing > 0) {
-      this.logger.log(`Scam patterns already has ${existing} entries, skipping seed`);
+      this.logger.log(
+        `Scam patterns already has ${existing} entries, skipping seed`,
+      );
       return;
     }
 
@@ -350,7 +371,10 @@ export class AiSeedService implements OnModuleInit {
             [vectorStr, saved.id],
           );
         } catch (error) {
-          this.logger.warn(`Failed to embed scam pattern: ${pattern.name}`, error);
+          this.logger.warn(
+            `Failed to embed scam pattern: ${pattern.name}`,
+            error,
+          );
         }
         await new Promise((r) => setTimeout(r, 300));
       }

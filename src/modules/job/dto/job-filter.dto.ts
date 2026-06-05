@@ -62,5 +62,4 @@ export class JobFilterDto {
   @IsNumber()
   @Type(() => Number)
   radius?: number;
-
 }

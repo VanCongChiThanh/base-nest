@@ -1,9 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  forwardRef,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PayOS } from '@payos/node';
@@ -185,7 +180,11 @@ export class SubscriptionService {
 
   private getPayOSClient(): PayOS {
     if (!this.payosClient) {
-      if (!this.payosConf.clientId || !this.payosConf.apiKey || !this.payosConf.checksumKey) {
+      if (
+        !this.payosConf.clientId ||
+        !this.payosConf.apiKey ||
+        !this.payosConf.checksumKey
+      ) {
         throw new BadRequestException(SUBSCRIPTION_ERRORS.PAYMENT_CONFIG_ERROR);
       }
       this.payosClient = new PayOS({
@@ -249,12 +248,33 @@ export class SubscriptionService {
     await this.ensureSeededPlans();
 
     const roleToScope = this.getScopeByRole(user.role);
-    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
-    const currentPlan = await this.getCurrentPlanForUser(targetUserId, roleToScope);
+    const targetUserId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const currentPlan = await this.getCurrentPlanForUser(
+      targetUserId,
+      roleToScope,
+    );
+    const monthlyPostLimit = currentPlan?.maxPostsPerMonth ?? 0;
+    const isUnlimitedMonthlyPosts = Boolean(
+      currentPlan?.featureConfig?.['job.post.unlimited'],
+    );
+    const monthlyPostPeriodKey = this.buildPeriodKey('monthly');
+    const monthlyPostCounter = await this.usageCounterRepository.findOne({
+      where: {
+        userId: targetUserId,
+        featureKey: 'job.post.count',
+        periodKey: monthlyPostPeriodKey,
+      },
+    });
+    const monthlyPostUsed = monthlyPostCounter?.count ?? 0;
 
     const featureConfig = {
       ...(currentPlan?.featureConfig || {}),
-      'job.post.monthly_limit': currentPlan?.maxPostsPerMonth ?? 0,
+      'job.post.monthly_limit': monthlyPostLimit,
+      'job.post.monthly_used': monthlyPostUsed,
+      'job.post.monthly_remaining': isUnlimitedMonthlyPosts
+        ? null
+        : Math.max(monthlyPostLimit - monthlyPostUsed, 0),
       'verification.level': user.verificationLevel,
       'account.role': user.role,
     };
@@ -303,8 +323,9 @@ export class SubscriptionService {
     const periodType = quota.period || 'monthly';
     const amount = quota.amount || 1;
     const periodKey = this.buildPeriodKey(periodType);
-    
-    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+
+    const targetUserId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
 
     let counter = await this.usageCounterRepository.findOne({
       where: {
@@ -332,7 +353,6 @@ export class SubscriptionService {
     await this.usageCounterRepository.save(counter);
   }
 
-
   async assignPlan(adminId: string, targetUserId: string, dto: AssignPlanDto) {
     await this.ensureSeededPlans();
 
@@ -356,9 +376,11 @@ export class SubscriptionService {
     };
   }
 
-  async getUsageSnapshot(userId: string) {
+  async getUsageSnapshot(user: User) {
+    const targetUserId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     const counters = await this.usageCounterRepository.find({
-      where: { userId },
+      where: { userId: targetUserId },
       order: { updatedAt: 'DESC' },
       take: 100,
     });
@@ -391,7 +413,6 @@ export class SubscriptionService {
       throw new ForbiddenException(SUBSCRIPTION_ERRORS.PLAN_NOT_AVAILABLE);
     }
 
-
     if (
       user.role === Role.ORGANIZATION &&
       plan.code === PlanCode.BUSINESS &&
@@ -411,8 +432,10 @@ export class SubscriptionService {
       throw new BadRequestException(SUBSCRIPTION_ERRORS.PAYMENT_FAILED);
     }
 
-    const orderCode = Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 1000));
-    
+    const orderCode = Number(
+      String(Date.now()).slice(-6) + Math.floor(Math.random() * 1000),
+    );
+
     const paymentOrder = this.paymentOrderRepository.create({
       userId,
       planCode,
@@ -455,8 +478,10 @@ export class SubscriptionService {
     const payos = this.getPayOSClient();
     try {
       const webhookData = await payos.webhooks.verify(body);
-      
-      this.logger.log(`Received verified webhook for order: ${webhookData.orderCode}`);
+
+      this.logger.log(
+        `Received verified webhook for order: ${webhookData.orderCode}`,
+      );
 
       if (body.code !== '00') {
         return { success: true, message: 'Ignoring non-success raw code' };
@@ -468,13 +493,18 @@ export class SubscriptionService {
 
       if (!paymentOrder) {
         // Nếu không phải subscription payment, thử xem có phải escrow deposit không
-        const isEscrow = await this.escrowService.handleEscrowDeposit(webhookData.orderCode, webhookData.amount);
+        const isEscrow = await this.escrowService.handleEscrowDeposit(
+          webhookData.orderCode,
+          webhookData.amount,
+        );
         if (isEscrow) {
           return { success: true, message: 'Processed as escrow deposit' };
         }
-        
-        this.logger.warn(`Payment order/Escrow not found for orderCode: ${webhookData.orderCode}`);
-        return { success: true }; 
+
+        this.logger.warn(
+          `Payment order/Escrow not found for orderCode: ${webhookData.orderCode}`,
+        );
+        return { success: true };
       }
 
       if (paymentOrder.status === PaymentOrderStatus.PAID) {
@@ -482,8 +512,10 @@ export class SubscriptionService {
       }
 
       if (webhookData.amount < paymentOrder.amount) {
-        this.logger.warn(`Underpayment detected for order ${paymentOrder.orderCode}. Expected: ${paymentOrder.amount}, Received: ${webhookData.amount}`);
-        
+        this.logger.warn(
+          `Underpayment detected for order ${paymentOrder.orderCode}. Expected: ${paymentOrder.amount}, Received: ${webhookData.amount}`,
+        );
+
         await this.notificationService.create({
           userId: paymentOrder.userId,
           type: 'SYSTEM' as any,
@@ -526,7 +558,7 @@ export class SubscriptionService {
     const payos = this.getPayOSClient();
     try {
       const paymentLink = await payos.paymentRequests.get(orderCode);
-      
+
       if (paymentLink.status === 'PAID' || paymentLink.amountRemaining === 0) {
         paymentOrder.status = PaymentOrderStatus.PAID;
         paymentOrder.paidAt = new Date();

@@ -122,10 +122,7 @@ export class PaymentController {
    * → Trả về PayOS checkout URL để employer thanh toán ký quỹ
    */
   @Post('escrow')
-  async createEscrow(
-    @CurrentUser() user: User,
-    @Body() dto: CreateEscrowDto,
-  ) {
+  async createEscrow(@CurrentUser() user: User, @Body() dto: CreateEscrowDto) {
     return this.escrowService.createEscrow(user.id, dto);
   }
 
@@ -146,9 +143,7 @@ export class PaymentController {
    * Sync trạng thái thanh toán PayOS (fallback nếu webhook thất bại)
    */
   @Get('escrow/sync/:orderCode')
-  async syncEscrowDeposit(
-    @Param('orderCode') orderCode: string,
-  ) {
+  async syncEscrowDeposit(@Param('orderCode') orderCode: string) {
     return this.escrowService.syncEscrowDepositStatus(Number(orderCode));
   }
 
@@ -214,6 +209,32 @@ export class PaymentController {
     @CurrentUser() user: User,
   ) {
     return this.escrowService.confirmMilestoneReceipt(id, user.id);
+  }
+
+  /**
+   * GET /worker/milestones
+   * Worker xem danh sách milestones của mình (trang quản lý tài chính)
+   */
+  @Get('worker/milestones')
+  async getWorkerMilestones(
+    @CurrentUser() user: User,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+  ) {
+    return this.escrowService.getWorkerMilestones(user.id, page, limit, status);
+  }
+
+  /**
+   * POST /escrow/milestones/:id/report-not-received
+   * Worker báo cáo chưa nhận được tiền (gửi thông báo đến admin)
+   */
+  @Post('escrow/milestones/:id/report-not-received')
+  async reportMilestoneNotReceived(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.escrowService.reportMilestoneNotReceived(id, user.id);
   }
 
   // ==================== ADMIN: GIẢI NGÂN ====================

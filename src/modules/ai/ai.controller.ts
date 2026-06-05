@@ -16,8 +16,17 @@ import type { Response } from 'express';
 import { AiChatbotService } from './ai-chatbot.service';
 import { AiMatchingService } from './ai-matching.service';
 import { AiSyncCronService } from './ai-sync-cron.service';
-import { ScamDetectorService, ScamAnalysisResult } from './scam-detector.service';
-import { AiChatDto, AnalyzeJobDto, AnalyzeJobContentDto, BatchSyncDto, UpsertFaqDto } from './dto';
+import {
+  ScamDetectorService,
+  ScamAnalysisResult,
+} from './scam-detector.service';
+import {
+  AiChatDto,
+  AnalyzeJobDto,
+  AnalyzeJobContentDto,
+  BatchSyncDto,
+  UpsertFaqDto,
+} from './dto';
 import { ALL_SYNC_TARGETS } from './ai-embedding.constants';
 import { GraphRagService } from './graph-rag.service';
 import { JwtAuthGuard } from '../../common/guards';
@@ -47,7 +56,7 @@ export class AiController {
     private readonly savedJobRepo: Repository<SavedJob>,
     @InjectRepository(Job)
     private readonly jobRepo: Repository<Job>,
-  ) { }
+  ) {}
 
   // ==================== AI CHATBOT ====================
 
@@ -69,7 +78,11 @@ export class AiController {
     res.setHeader('Connection', 'keep-alive');
 
     try {
-      const stream = this.chatbotService.chatStream(user.id, dto.message, dto.sessionId);
+      const stream = this.chatbotService.chatStream(
+        user.id,
+        dto.message,
+        dto.sessionId,
+      );
       for await (const chunk of stream) {
         // Send each chunk as an SSE data payload
         res.write(`data: ${JSON.stringify(chunk)}\n\n`);
@@ -125,7 +138,10 @@ export class AiController {
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @Query('limit') limit?: number,
   ) {
-    return this.aiMatchingService.matchCandidatesForJob(jobId, limit ? Number(limit) : 10);
+    return this.aiMatchingService.matchCandidatesForJob(
+      jobId,
+      limit ? Number(limit) : 10,
+    );
   }
 
   // ==================== MANUAL SYNC ====================
@@ -153,7 +169,11 @@ export class AiController {
   @Post('dev-sync')
   async triggerDevSync() {
     await this.aiSyncCronService.enqueueBatchSync();
-    return { success: true, message: 'Đã đưa yêu cầu đồng bộ toàn bộ vào hàng đợi. Kiểm tra logs để theo dõi.' };
+    return {
+      success: true,
+      message:
+        'Đã đưa yêu cầu đồng bộ toàn bộ vào hàng đợi. Kiểm tra logs để theo dõi.',
+    };
   }
 
   @Post('sync-jobs')
@@ -211,9 +231,10 @@ export class AiController {
         : undefined,
       address: job.address,
       salary: Number(job.salaryPerHour || job.totalBudget || 0),
-      salaryText: job.salaryType === 'HOURLY' 
-        ? `${Number(job.salaryPerHour).toLocaleString()}₫/giờ` 
-        : `${Number(job.totalBudget).toLocaleString()}₫ (Khoán)`,
+      salaryText:
+        job.salaryType === 'HOURLY'
+          ? `${Number(job.salaryPerHour).toLocaleString()}₫/giờ`
+          : `${Number(job.totalBudget).toLocaleString()}₫ (Khoán)`,
     });
   }
 
@@ -266,7 +287,13 @@ export class AiController {
   ) {
     const [data, total] = await this.savedJobRepo.findAndCount({
       where: { userId: user.id },
-      relations: ['job', 'job.employer', 'job.category', 'job.jobSkills', 'job.jobSkills.skill'],
+      relations: [
+        'job',
+        'job.employer',
+        'job.category',
+        'job.jobSkills',
+        'job.jobSkills.skill',
+      ],
       order: { createdAt: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,

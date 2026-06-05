@@ -8,7 +8,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ApplicationMessage, JobApplication, JobAssignment } from './entities';
-import { ApplicationStatus, AssignmentStatus, JobType } from '../../common/enums';
+import {
+  ApplicationStatus,
+  AssignmentStatus,
+  JobType,
+} from '../../common/enums';
 import { APPLICATION_ERRORS } from '../../common/constants/error-codes.constant';
 import { ApplicationChatGateway } from './application-chat.gateway';
 
@@ -22,7 +26,7 @@ export class ApplicationChatService {
     @InjectRepository(JobAssignment)
     private readonly assignmentRepository: Repository<JobAssignment>,
     @Inject(forwardRef(() => ApplicationChatGateway))
-    private readonly applicationChatGateway: ApplicationChatGateway
+    private readonly applicationChatGateway: ApplicationChatGateway,
   ) {}
 
   /** Worker or employer of this application may read messages. */
@@ -58,7 +62,9 @@ export class ApplicationChatService {
     application: JobApplication,
     assignment: JobAssignment | null,
   ): boolean {
-    const isDirectHire = application.job?.isDirectHire || application.coverLetter?.includes('Direct hire request');
+    const isDirectHire =
+      application.job?.isDirectHire ||
+      application.coverLetter?.includes('Direct hire request');
     if (
       application.status !== ApplicationStatus.ACCEPTED &&
       application.status !== ApplicationStatus.EMPLOYER_ACCEPTED &&
@@ -66,7 +72,7 @@ export class ApplicationChatService {
     ) {
       return false;
     }
-    
+
     // Đối với job ONLINE, luôn cho phép chat kể cả khi đã hoàn thành hoặc hủy
     if (application.job?.jobType === JobType.ONLINE) {
       return true;
@@ -116,8 +122,8 @@ export class ApplicationChatService {
       jobDetails: {
         jobId: application.jobId,
         isDirectHire: Boolean(
-          application.job?.isDirectHire || 
-          application.coverLetter?.includes('Direct hire request')
+          application.job?.isDirectHire ||
+          application.coverLetter?.includes('Direct hire request'),
         ),
         employerId: application.job?.employerId ?? '',
         workerId: application.workerId,
@@ -219,8 +225,8 @@ export class ApplicationChatService {
           jobId: application.jobId,
           jobTitle: application.job?.title ?? 'Công việc',
           isDirectHire: Boolean(
-            application.job?.isDirectHire || 
-            application.coverLetter?.includes('Direct hire request')
+            application.job?.isDirectHire ||
+            application.coverLetter?.includes('Direct hire request'),
           ),
           participant:
             application.workerId === userId

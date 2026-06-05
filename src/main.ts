@@ -32,7 +32,9 @@ async function bootstrap() {
   // CORS
   const frontendUrl = configService.get<string>('FRONTEND_URL');
   app.enableCors({
-    origin: frontendUrl ? frontendUrl.split(',').map((url) => url.trim()) : true,
+    origin: frontendUrl
+      ? frontendUrl.split(',').map((url) => url.trim())
+      : true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   });

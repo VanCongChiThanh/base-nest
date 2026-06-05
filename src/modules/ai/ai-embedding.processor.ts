@@ -52,7 +52,9 @@ export class AiEmbeddingProcessor {
   @Process(EmbeddingJobName.SYNC_WORKER_SERVICE)
   async handleSyncWorkerService(bullJob: Bull.Job<SyncWorkerServicePayload>) {
     const { workerServiceId } = bullJob.data;
-    this.logger.debug(`[Queue] SYNC_WORKER_SERVICE ${workerServiceId} → delegated to graph sync`);
+    this.logger.debug(
+      `[Queue] SYNC_WORKER_SERVICE ${workerServiceId} → delegated to graph sync`,
+    );
     await this.graphRagService.syncWorkerServiceNode(workerServiceId);
   }
 
@@ -66,7 +68,10 @@ export class AiEmbeddingProcessor {
       await this.graphRagService.deactivateNode(`job_${jobId}`);
       this.logger.log(`[Queue] ✅ Graph node deactivated: job_${jobId}`);
     } catch (error: any) {
-      this.logger.error(`[Queue] Lỗi khi deactivate graph node job ${jobId}`, error?.stack);
+      this.logger.error(
+        `[Queue] Lỗi khi deactivate graph node job ${jobId}`,
+        error?.stack,
+      );
     }
   }
 
@@ -108,11 +113,15 @@ export class AiEmbeddingProcessor {
 
       for (const svc of services) {
         try {
-          const synced = await this.graphRagService.syncWorkerServiceNode(svc.id);
+          const synced = await this.graphRagService.syncWorkerServiceNode(
+            svc.id,
+          );
           if (synced) servicesSynced++;
           await this.delay(300);
         } catch (err: any) {
-          this.logger.warn(`[Batch] Skip worker-service ${svc.id}: ${err?.message}`);
+          this.logger.warn(
+            `[Batch] Skip worker-service ${svc.id}: ${err?.message}`,
+          );
         }
       }
     } catch (error: any) {
@@ -125,7 +134,10 @@ export class AiEmbeddingProcessor {
 
     // Thông báo admin
     try {
-      const admins = await this.dataSource.query('SELECT id FROM users WHERE role = $1', ['ADMIN']);
+      const admins = await this.dataSource.query(
+        'SELECT id FROM users WHERE role = $1',
+        ['ADMIN'],
+      );
       if (admins?.length > 0) {
         await this.notificationHelper.sendToMany(
           admins.map((a: any) => a.id),
@@ -145,7 +157,6 @@ export class AiEmbeddingProcessor {
     return { jobsSynced, servicesSynced };
   }
 
-
   // ─── Graph RAG Processors ──────────────────────────────────────
 
   @Process(EmbeddingJobName.SYNC_GRAPH_JOB)
@@ -156,7 +167,10 @@ export class AiEmbeddingProcessor {
       await this.graphRagService.syncJobNode(jobId);
       this.logger.log(`[GraphRAG] ✅ Graph node synced: job ${jobId}`);
     } catch (err: any) {
-      this.logger.error(`[GraphRAG] Error syncing graph job ${jobId}`, err?.stack);
+      this.logger.error(
+        `[GraphRAG] Error syncing graph job ${jobId}`,
+        err?.stack,
+      );
       throw err;
     }
   }
@@ -164,12 +178,19 @@ export class AiEmbeddingProcessor {
   @Process(EmbeddingJobName.SYNC_GRAPH_WORKER)
   async handleSyncGraphWorker(bullJob: Bull.Job<SyncGraphWorkerPayload>) {
     const { workerServiceId } = bullJob.data;
-    this.logger.log(`[GraphRAG] Sync graph node for worker-service ${workerServiceId}`);
+    this.logger.log(
+      `[GraphRAG] Sync graph node for worker-service ${workerServiceId}`,
+    );
     try {
       await this.graphRagService.syncWorkerServiceNode(workerServiceId);
-      this.logger.log(`[GraphRAG] ✅ Graph node synced: worker-service ${workerServiceId}`);
+      this.logger.log(
+        `[GraphRAG] ✅ Graph node synced: worker-service ${workerServiceId}`,
+      );
     } catch (err: any) {
-      this.logger.error(`[GraphRAG] Error syncing graph worker ${workerServiceId}`, err?.stack);
+      this.logger.error(
+        `[GraphRAG] Error syncing graph worker ${workerServiceId}`,
+        err?.stack,
+      );
       throw err;
     }
   }
@@ -179,7 +200,9 @@ export class AiEmbeddingProcessor {
   @Process(EmbeddingJobName.BATCH_SYNC_SELECTIVE)
   async handleBatchSyncSelective(bullJob: Bull.Job<BatchSyncSelectivePayload>) {
     const { targets } = bullJob.data;
-    this.logger.log(`[Queue] Selective sync started — targets: [${targets.join(', ')}]`);
+    this.logger.log(
+      `[Queue] Selective sync started — targets: [${targets.join(', ')}]`,
+    );
 
     const result: Record<string, number> = {};
 
@@ -215,11 +238,15 @@ export class AiEmbeddingProcessor {
         });
         for (const svc of services) {
           try {
-            const synced = await this.graphRagService.syncWorkerServiceNode(svc.id);
+            const synced = await this.graphRagService.syncWorkerServiceNode(
+              svc.id,
+            );
             if (synced) count++;
             await this.delay(300);
           } catch (err: any) {
-            this.logger.warn(`[Selective] Skip worker-service ${svc.id}: ${err?.message}`);
+            this.logger.warn(
+              `[Selective] Skip worker-service ${svc.id}: ${err?.message}`,
+            );
           }
         }
       } catch (err: any) {
@@ -240,7 +267,9 @@ export class AiEmbeddingProcessor {
       }
     }
 
-    this.logger.log(`[Queue] ✅ Selective sync done: ${JSON.stringify(result)}`);
+    this.logger.log(
+      `[Queue] ✅ Selective sync done: ${JSON.stringify(result)}`,
+    );
 
     // Thông báo admin (cùng cơ chế với BATCH_SYNC_ALL)
     const parts: string[] = [];
@@ -259,9 +288,10 @@ export class AiEmbeddingProcessor {
         : 'Đồng bộ AI (theo lựa chọn) đã hoàn tất.';
 
     try {
-      const admins = await this.dataSource.query('SELECT id FROM users WHERE role = $1', [
-        'ADMIN',
-      ]);
+      const admins = await this.dataSource.query(
+        'SELECT id FROM users WHERE role = $1',
+        ['ADMIN'],
+      );
       if (admins?.length > 0) {
         await this.notificationHelper.sendToMany(
           admins.map((a: { id: string }) => a.id),
@@ -275,7 +305,10 @@ export class AiEmbeddingProcessor {
         );
       }
     } catch (notifyErr: unknown) {
-      this.logger.error('Lỗi gửi thông báo selective sync', (notifyErr as Error)?.stack);
+      this.logger.error(
+        'Lỗi gửi thông báo selective sync',
+        (notifyErr as Error)?.stack,
+      );
     }
 
     return result;
@@ -289,7 +322,10 @@ export class AiEmbeddingProcessor {
       await this.graphRagService.deactivateNode(sourceId);
       this.logger.log(`[GraphRAG] ✅ Graph node deactivated: ${sourceId}`);
     } catch (err: any) {
-      this.logger.error(`[GraphRAG] Error deactivating graph node ${sourceId}`, err?.stack);
+      this.logger.error(
+        `[GraphRAG] Error deactivating graph node ${sourceId}`,
+        err?.stack,
+      );
     }
   }
 

@@ -54,8 +54,7 @@ export class ScamPattern {
     type: 'text',
     nullable: true,
     transformer: {
-      to: (value: number[] | null) =>
-        value ? `[${value.join(',')}]` : null,
+      to: (value: number[] | null) => (value ? `[${value.join(',')}]` : null),
       from: (value: string | null) => {
         if (!value) return null;
         const clean = value.replace(/[\[\]]/g, '');

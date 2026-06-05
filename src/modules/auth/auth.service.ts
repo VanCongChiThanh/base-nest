@@ -64,7 +64,10 @@ export class AuthService {
 
     // Send verification email
     try {
-      await this.mailService.sendVerificationEmail(user.email, verificationToken);
+      await this.mailService.sendVerificationEmail(
+        user.email,
+        verificationToken,
+      );
     } catch (error) {
       console.error('Lỗi khi gửi email xác thực:', error);
       // Tiếp tục thành công, không ném ra 500 error. Admin có thể debug SMTP sau.
