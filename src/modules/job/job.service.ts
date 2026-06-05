@@ -135,6 +135,13 @@ export class JobService {
         console.warn('Failed to enqueue AI embedding for job:', err?.message),
       );
 
+    // Enqueue Scam Analysis
+    this.aiSyncCronService
+      .enqueueScamAnalysis(saved.id)
+      .catch((err) =>
+        console.warn('Failed to enqueue Scam Analysis for job:', err?.message),
+      );
+
     return fullJob;
   }
 
@@ -174,6 +181,13 @@ export class JobService {
         isDirectHire: true,
       },
     );
+
+    // Enqueue Scam Analysis
+    this.aiSyncCronService
+      .enqueueScamAnalysis(saved.id)
+      .catch((err) =>
+        console.warn('Failed to enqueue Scam Analysis for job:', err?.message),
+      );
 
     return this.findJobById(saved.id);
   }
@@ -548,6 +562,8 @@ export class JobService {
         ),
       );
 
+    this.aiSyncCronService.deleteScamAnalysisCache(jobId);
+
     return saved;
   }
 
@@ -771,6 +787,8 @@ export class JobService {
             err?.message,
           ),
         );
+      
+      this.aiSyncCronService.deleteScamAnalysisCache(application.jobId);
     }
 
     return saved;

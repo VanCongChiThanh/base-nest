@@ -40,7 +40,7 @@ export class WorkerServiceQueryDto {
   type?: ServiceType;
 
   @IsOptional()
-  @Transform(({ value }) => value === 'true')
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   isAvailableNow?: boolean;
 

@@ -3,6 +3,7 @@ import {
   Logger,
   InternalServerErrorException,
   BadRequestException,
+  Inject,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bull';
@@ -13,6 +14,8 @@ import {
   SyncTarget,
   ALL_SYNC_TARGETS,
 } from './ai-embedding.constants';
+import { REDIS_CLIENT } from '../redis/redis.module';
+import Redis from 'ioredis';
 
 /**
  * Cron job that dispatches batch-sync to the Bull queue.
@@ -26,6 +29,8 @@ export class AiSyncCronService {
   constructor(
     @InjectQueue(AI_EMBEDDING_QUEUE)
     private readonly embeddingQueue: Bull.Queue,
+    @Inject(REDIS_CLIENT)
+    private readonly redisClient: Redis,
   ) {}
 
   // ─── Cron: dispatch batch sync every hour ──────────────────────
@@ -53,6 +58,31 @@ export class AiSyncCronService {
       },
     );
     this.logger.debug(`Enqueued SYNC_JOB for ${jobId}`);
+  }
+
+  /** Enqueue scam analysis for a single job */
+  async enqueueScamAnalysis(jobId: string) {
+    await this.embeddingQueue.add(
+      EmbeddingJobName.ANALYZE_SCAM_JOB,
+      { jobId },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      },
+    );
+    this.logger.debug(`Enqueued ANALYZE_SCAM_JOB for ${jobId}`);
+  }
+
+  /** Delete scam analysis cache for a single job */
+  async deleteScamAnalysisCache(jobId: string) {
+    try {
+      await this.redisClient.del(`job:scam-analysis:${jobId}`);
+      this.logger.debug(`Deleted scam analysis cache for job ${jobId}`);
+    } catch (err) {
+      this.logger.warn(`Failed to delete scam analysis cache for job ${jobId}`, err);
+    }
   }
 
   /** Enqueue embedding for a single worker service */

@@ -1,5 +1,5 @@
 import { Process, Processor } from '@nestjs/bull';
-import { Logger } from '@nestjs/common';
+import { Logger, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import Bull from 'bull';
@@ -7,8 +7,11 @@ import { Job } from '../job/entities';
 import { WorkerServiceEntity } from '../worker-service/entities';
 import { GeminiService } from './gemini.service';
 import { GraphRagService } from './graph-rag.service';
+import { ScamDetectorService } from './scam-detector.service';
 import { NotificationHelper } from '../notification/notification.helper';
 import { JobStatus, NotificationType } from '../../common/enums';
+import { REDIS_CLIENT } from '../redis/redis.module';
+import Redis from 'ioredis';
 import {
   AI_EMBEDDING_QUEUE,
   EmbeddingJobName,
@@ -19,6 +22,7 @@ import {
   SyncGraphWorkerPayload,
   RemoveGraphNodePayload,
   BatchSyncSelectivePayload,
+  AnalyzeScamJobPayload,
 } from './ai-embedding.constants';
 
 @Processor(AI_EMBEDDING_QUEUE)
@@ -34,6 +38,9 @@ export class AiEmbeddingProcessor {
     private readonly graphRagService: GraphRagService,
     private readonly dataSource: DataSource,
     private readonly notificationHelper: NotificationHelper,
+    private readonly scamDetectorService: ScamDetectorService,
+    @Inject(REDIS_CLIENT)
+    private readonly redisClient: Redis,
   ) {}
 
   // ─── Single Job (legacy → delegates to graph) ──────────────────
@@ -45,6 +52,55 @@ export class AiEmbeddingProcessor {
     // knowledge_embeddings only stores FAQ/guide/policy seeds.
     this.logger.debug(`[Queue] SYNC_JOB ${jobId} → delegated to graph sync`);
     await this.graphRagService.syncJobNode(jobId);
+  }
+
+  // ─── Scam Analysis ───────────────────────────────────────────────
+
+  @Process(EmbeddingJobName.ANALYZE_SCAM_JOB)
+  async handleAnalyzeScamJob(bullJob: Bull.Job<AnalyzeScamJobPayload>) {
+    const { jobId } = bullJob.data;
+    this.logger.debug(`[Queue] ANALYZE_SCAM_JOB for job ${jobId}`);
+
+    try {
+      const job = await this.jobRepository.findOne({
+        where: { id: jobId },
+        relations: ['employer'],
+      });
+
+      if (!job) {
+        this.logger.warn(`[Queue] Job ${jobId} not found for scam analysis`);
+        return;
+      }
+
+      const analysisResult = await this.scamDetectorService.analyzeJob({
+        title: job.title,
+        description: job.description,
+        companyName: job.employer?.firstName
+          ? `${job.employer.firstName} ${job.employer.lastName}`
+          : undefined,
+        address: job.address,
+        salary: Number(job.salaryPerHour || job.totalBudget || 0),
+        salaryText:
+          job.salaryType === 'HOURLY'
+            ? `${Number(job.salaryPerHour).toLocaleString()}₫/giờ`
+            : `${Number(job.totalBudget).toLocaleString()}₫ (Khoán)`,
+      });
+
+      // Cache the result in Redis with 30 days TTL (2592000 seconds)
+      await this.redisClient.setex(
+        `job:scam-analysis:${jobId}`,
+        2592000,
+        JSON.stringify(analysisResult),
+      );
+
+      this.logger.debug(`[Queue] ✅ Scam analysis cached for job ${jobId}`);
+    } catch (error: any) {
+      this.logger.error(
+        `[Queue] Scam analysis failed for job ${jobId}`,
+        error?.stack,
+      );
+      throw error;
+    }
   }
 
   // ─── Single Worker Service (legacy → delegates to graph) ────────

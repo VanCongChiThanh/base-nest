@@ -11,6 +11,7 @@ import {
   InternalServerErrorException,
   UseGuards,
   Res,
+  Inject,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { AiChatbotService } from './ai-chatbot.service';
@@ -43,6 +44,8 @@ import { SavedJob } from './entities';
 import { Job } from '../job/entities';
 import { NotFoundException, JOB_ERRORS } from '../../common';
 import { Role } from '../../common/enums';
+import { REDIS_CLIENT } from '../redis/redis.module';
+import Redis from 'ioredis';
 
 @Controller('ai')
 export class AiController {
@@ -56,6 +59,8 @@ export class AiController {
     private readonly savedJobRepo: Repository<SavedJob>,
     @InjectRepository(Job)
     private readonly jobRepo: Repository<Job>,
+    @Inject(REDIS_CLIENT)
+    private readonly redisClient: Redis,
   ) {}
 
   // ==================== AI CHATBOT ====================
@@ -212,6 +217,29 @@ export class AiController {
 
   // ==================== SCAM DETECTION ====================
 
+  @Get('analyze-job/:jobId')
+  async getAnalyzeJob(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+  ): Promise<ScamAnalysisResult | null> {
+    const cacheKey = `job:scam-analysis:${jobId}`;
+    const cached = await this.redisClient.get(cacheKey);
+
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (err) {
+        // ignore JSON parse error
+      }
+    }
+
+    // Cache miss: If job is old, we can either analyze synchronously or just return null
+    // Theo yêu cầu mới nhất: "không hiển thị gì cả vì đa số job cũ đã đóng rồi"
+    // => return null directly
+    return null;
+  }
+
+  // Giữ lại hoặc thay thế endpoint POST cũ (tùy ý).
+  // Đã sửa POST để sử dụng cho việc test hoặc analyze thủ công nếu cần.
   @Post('analyze-job')
   async analyzeJobById(
     @Body() dto: AnalyzeJobDto,
@@ -223,7 +251,15 @@ export class AiController {
     if (!job) {
       throw new NotFoundException(JOB_ERRORS.JOB_NOT_FOUND);
     }
-    return this.scamDetectorService.analyzeJob({
+    
+    // Check cache first for manual triggers too
+    const cacheKey = `job:scam-analysis:${dto.jobId}`;
+    const cached = await this.redisClient.get(cacheKey);
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) {}
+    }
+
+    const result = await this.scamDetectorService.analyzeJob({
       title: job.title,
       description: job.description,
       companyName: job.employer?.firstName
@@ -236,6 +272,15 @@ export class AiController {
           ? `${Number(job.salaryPerHour).toLocaleString()}₫/giờ`
           : `${Number(job.totalBudget).toLocaleString()}₫ (Khoán)`,
     });
+
+    // Cache the result in Redis with 30 days TTL
+    await this.redisClient.setex(
+      cacheKey,
+      2592000,
+      JSON.stringify(result),
+    );
+
+    return result;
   }
 
   @Post('analyze-job-content')
