@@ -5,11 +5,12 @@ import { Repository, DataSource } from 'typeorm';
 import Bull from 'bull';
 import { Job } from '../job/entities';
 import { WorkerServiceEntity } from '../worker-service/entities';
+import { EmployerProfile } from '../profile/entities';
 import { GeminiService } from './gemini.service';
 import { GraphRagService } from './graph-rag.service';
 import { ScamDetectorService } from './scam-detector.service';
 import { NotificationHelper } from '../notification/notification.helper';
-import { JobStatus, NotificationType } from '../../common/enums';
+import { JobStatus, NotificationType, JobSalaryType } from '../../common/enums';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import Redis from 'ioredis';
 import {
@@ -41,6 +42,8 @@ export class AiEmbeddingProcessor {
     private readonly scamDetectorService: ScamDetectorService,
     @Inject(REDIS_CLIENT)
     private readonly redisClient: Redis,
+    @InjectRepository(EmployerProfile)
+    private readonly employerProfileRepo: Repository<EmployerProfile>,
   ) {}
 
   // ─── Single Job (legacy → delegates to graph) ──────────────────
@@ -72,16 +75,30 @@ export class AiEmbeddingProcessor {
         return;
       }
 
+      let companyName = job.employer?.firstName
+        ? `${job.employer.firstName} ${job.employer.lastName}`
+        : undefined;
+      try {
+        const empProfile = await this.employerProfileRepo.findOne({
+          where: { userId: job.employerId },
+          select: ['companyName'],
+        });
+        if (empProfile?.companyName) {
+          companyName = empProfile.companyName;
+        }
+      } catch (e) {
+        this.logger.warn('Failed to fetch employer profile for scam analysis', e);
+      }
+
       const analysisResult = await this.scamDetectorService.analyzeJob({
         title: job.title,
         description: job.description,
-        companyName: job.employer?.firstName
-          ? `${job.employer.firstName} ${job.employer.lastName}`
-          : undefined,
+        companyName: companyName,
         address: job.address,
+        paymentMethod: job.paymentMethod,
         salary: Number(job.salaryPerHour || job.totalBudget || 0),
         salaryText:
-          job.salaryType === 'HOURLY'
+          job.salaryType === JobSalaryType.HOURLY
             ? `${Number(job.salaryPerHour).toLocaleString()}₫/giờ`
             : `${Number(job.totalBudget).toLocaleString()}₫ (Khoán)`,
       });

@@ -20,6 +20,7 @@ interface JobContent {
   salary?: number;
   salaryText?: string;
   address?: string;
+  paymentMethod?: string;
 }
 
 // ─── Rule-based scoring weights ───
@@ -125,8 +126,8 @@ const RULE_CHECKS: Array<{
   },
 ];
 
-const SCAM_ANALYSIS_PROMPT = `Bạn là chuyên gia phân tích tin tuyển dụng lừa đảo tại Việt Nam.
-Hãy phân tích tin tuyển dụng sau và trả về kết quả dạng JSON (KHÔNG có markdown code block):
+const SCAM_ANALYSIS_PROMPT = `Bạn là chuyên gia phân tích chất lượng tin tuyển dụng tại Việt Nam.
+Hãy phân tích tin tuyển dụng sau và trả về kết quả định dạng JSON (KHÔNG có markdown code block):
 
 {
   "isScam": true/false,
@@ -135,14 +136,14 @@ Hãy phân tích tin tuyển dụng sau và trả về kết quả dạng JSON (
   "recommendation": "lời khuyên cho người tìm việc"
 }
 
-Các dấu hiệu cần chú ý:
-- Yêu cầu đặt cọc/chuyển khoản
-- Lương cao bất thường so với công việc
-- Thiếu thông tin công ty
-- Yêu cầu thông tin cá nhân nhạy cảm
-- Mô hình đa cấp/kim tự tháp
-- Mô tả mơ hồ, thiếu chi tiết
-- Áp lực thời gian (gấp, ngay lập tức)
+LƯU Ý QUAN TRỌNG:
+- Nền tảng ĐÃ YÊU CẦU XÁC THỰC DANH TÍNH (eKYC) với người đăng bài, nên rủi ro lừa đảo lấy cắp thông tin giả mạo là RẤT THẤP. Tuyệt đối KHÔNG kết luận quá tiêu cực (ví dụ: "tin giả mạo lấy cắp thông tin") trừ khi có bằng chứng cực kỳ rõ ràng như bắt đóng tiền cọc.
+- Thay vào đó, hãy tập trung phân tích CHẤT LƯỢNG tin đăng:
+  + Mô tả công việc có quá ngắn, sơ sài, ký tự rác không?
+  + Tên công ty hoặc địa chỉ có hợp lệ không? (ví dụ các chuỗi như 'fdsf', 'asdf' là ký tự rác).
+  + Mức lương có bất thường (quá cao hoặc quá thấp) so với tính chất công việc không?
+- Đưa ra điểm confidence (độ cảnh báo từ 0-100, điểm càng cao thì tin đăng càng kém chất lượng hoặc rủi ro).
+- Phần recommendation hãy ưu tiên nhắc nhở ứng viên trao đổi kỹ nội dung công việc. Đặc biệt nếu công việc là thanh toán trực tiếp bên ngoài nền tảng, hãy nhắc nhở ứng viên thỏa thuận rõ ràng và cẩn trọng để tránh rủi ro quỵt lương.
 `;
 
 @Injectable()
@@ -316,7 +317,8 @@ export class ScamDetectorService {
 Tiêu đề: ${job.title}
 Mô tả: ${job.description}
 Công ty: ${job.companyName || 'Không rõ'}
-Mức lương: ${job.salaryText || (job.salary ? `${job.salary.toLocaleString()}₫` : 'Không rõ')}
+Mức lương: ${job.salaryText || (job.salary ? `${job.salary.toLocaleString()}đ` : 'Không rõ')}
+Hình thức thanh toán: ${job.paymentMethod || 'Không rõ'}
 Địa chỉ: ${job.address || 'Không rõ'}`.trim();
 
       const response = await this.geminiService.generateContent(

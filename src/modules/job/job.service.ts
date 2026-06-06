@@ -378,6 +378,7 @@ export class JobService {
     const qb = this.jobRepository
       .createQueryBuilder('job')
       .leftJoinAndSelect('job.employer', 'employer')
+      .leftJoinAndSelect('job.postedBy', 'postedBy')
       .leftJoinAndSelect('job.category', 'category')
       .leftJoinAndSelect('job.jobSkills', 'jobSkills')
       .leftJoinAndSelect('jobSkills.skill', 'skill')
@@ -456,7 +457,7 @@ export class JobService {
   async findJobById(id: string): Promise<Job> {
     const job = await this.jobRepository.findOne({
       where: { id },
-      relations: ['employer', 'category', 'jobSkills', 'jobSkills.skill'],
+      relations: ['employer', 'postedBy', 'category', 'jobSkills', 'jobSkills.skill'],
     });
     if (!job) {
       throw new NotFoundException(JOB_ERRORS.JOB_NOT_FOUND);
@@ -472,7 +473,7 @@ export class JobService {
   ): Promise<{ data: Job[]; total: number; page: number; limit: number }> {
     const [data, total] = await this.jobRepository.findAndCount({
       where: { employerId },
-      relations: ['category', 'jobSkills', 'jobSkills.skill', 'applications'],
+      relations: ['category', 'jobSkills', 'jobSkills.skill', 'applications', 'postedBy'],
       order: { createdAt: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
@@ -624,6 +625,19 @@ export class JobService {
       },
     );
 
+    if (job.postedById && job.postedById !== job.employerId) {
+      await this.notificationHelper.send(
+        job.postedById,
+        NotificationType.JOB_APPLICATION_RECEIVED,
+        jobId,
+        {
+          jobTitle: job.title,
+          message: dto.coverLetter,
+          applicationId: saved.id,
+        },
+      );
+    }
+
     return saved;
   }
 
@@ -657,6 +671,15 @@ export class JobService {
       application.jobId,
       { jobTitle: application.job.title, workerName: workerId, applicationId },
     );
+
+    if (application.job.postedById && application.job.postedById !== application.job.employerId) {
+      await this.notificationHelper.send(
+        application.job.postedById,
+        NotificationType.APPLICATION_CANCELLED,
+        application.jobId,
+        { jobTitle: application.job.title, workerName: workerId, applicationId },
+      );
+    }
 
     return saved;
   }

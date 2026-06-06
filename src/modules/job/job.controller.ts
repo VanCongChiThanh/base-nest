@@ -43,7 +43,7 @@ export class JobController {
     period: 'monthly',
   })
   async createJob(@CurrentUser() user: User, @Body() dto: CreateJobDto) {
-    if (user.verificationLevel === VerificationLevel.NONE) {
+    if (user.role !== Role.RECRUITER && user.verificationLevel === VerificationLevel.NONE) {
       throw new BadRequestException(JOB_ERRORS.JOB_REQUIRE_EKYC);
     }
 

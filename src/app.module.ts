@@ -44,6 +44,7 @@ import { EkycModule } from './modules/ekyc';
 import { AdminModule } from './modules/admin';
 import { AiModule } from './modules/ai';
 import { WorkerServiceModule } from './modules/worker-service/worker-service.module';
+import { OrganizationModule } from './modules/organization/organization.module';
 
 @Module({
   imports: [
@@ -114,6 +115,7 @@ import { WorkerServiceModule } from './modules/worker-service/worker-service.mod
     AdminModule,
     AiModule,
     WorkerServiceModule,
+    OrganizationModule,
   ],
   providers: [
     // Global JWT Guard - Áp dụng cho tất cả endpoints (trừ @Public())

@@ -175,9 +175,9 @@ export class ProfileService {
     return profile;
   }
 
-  async getEmployerProfileById(id: string): Promise<EmployerProfile> {
+  async getEmployerProfileByUserId(userId: string): Promise<EmployerProfile> {
     const profile = await this.employerRepo.findOne({
-      where: { id },
+      where: { userId },
       relations: ['user'],
     });
     if (!profile) {

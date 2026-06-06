@@ -16,7 +16,7 @@ import {
   UpdateWorkerPrivacyDto,
   UpdateEmployerPrivacyDto,
 } from './dto';
-import { CurrentUser } from '../../common/decorators';
+import { CurrentUser, Public } from '../../common/decorators';
 import { User } from '../user/entities';
 import { Role } from '../../common/enums';
 
@@ -99,8 +99,9 @@ export class ProfileController {
     return this.profileService.updateEmployerPrivacySettings(targetUserId, dto);
   }
 
-  @Get('employer/:id')
-  async getEmployerProfile(@Param('id', ParseUUIDPipe) id: string) {
-    return this.profileService.getEmployerProfileById(id);
+  @Public()
+  @Get('employer/:userId')
+  async getEmployerProfile(@Param('userId', ParseUUIDPipe) userId: string) {
+    return this.profileService.getEmployerProfileByUserId(userId);
   }
 }

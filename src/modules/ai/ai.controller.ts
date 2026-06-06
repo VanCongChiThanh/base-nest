@@ -43,7 +43,7 @@ import { Repository } from 'typeorm';
 import { SavedJob } from './entities';
 import { Job } from '../job/entities';
 import { NotFoundException, JOB_ERRORS } from '../../common';
-import { Role } from '../../common/enums';
+import { JobSalaryType, Role } from '../../common/enums';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import Redis from 'ioredis';
 
@@ -94,8 +94,9 @@ export class AiController {
       }
       res.write('data: [DONE]\n\n');
       res.end();
-    } catch (err) {
-      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
       res.end();
     }
   }
@@ -256,7 +257,11 @@ export class AiController {
     const cacheKey = `job:scam-analysis:${dto.jobId}`;
     const cached = await this.redisClient.get(cacheKey);
     if (cached) {
-      try { return JSON.parse(cached); } catch (e) {}
+      try {
+        return JSON.parse(cached);
+      } catch {
+        // Ignore invalid cached JSON and re-run analysis.
+      }
     }
 
     const result = await this.scamDetectorService.analyzeJob({
@@ -268,7 +273,7 @@ export class AiController {
       address: job.address,
       salary: Number(job.salaryPerHour || job.totalBudget || 0),
       salaryText:
-        job.salaryType === 'HOURLY'
+        job.salaryType === JobSalaryType.HOURLY
           ? `${Number(job.salaryPerHour).toLocaleString()}₫/giờ`
           : `${Number(job.totalBudget).toLocaleString()}₫ (Khoán)`,
     });
