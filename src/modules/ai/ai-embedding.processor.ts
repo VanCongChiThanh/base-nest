@@ -87,7 +87,10 @@ export class AiEmbeddingProcessor {
           companyName = empProfile.companyName;
         }
       } catch (e) {
-        this.logger.warn('Failed to fetch employer profile for scam analysis', e);
+        this.logger.warn(
+          'Failed to fetch employer profile for scam analysis',
+          e,
+        );
       }
 
       const analysisResult = await this.scamDetectorService.analyzeJob({
