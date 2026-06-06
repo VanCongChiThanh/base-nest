@@ -57,7 +57,15 @@ const PLATFORM_LINK_MAP: {
   description: string;
 }[] = [
   {
-    patterns: ['ekyc', 'xác thực', 'định danh', 'kyc', 'cmnd', 'cccd', 'căn cước'],
+    patterns: [
+      'ekyc',
+      'xác thực',
+      'định danh',
+      'kyc',
+      'cmnd',
+      'cccd',
+      'căn cước',
+    ],
     title: 'Xác thực tài khoản (eKYC)',
     url: '/profile/kyc',
     description: 'Xác minh danh tính để mở khóa tính năng đầy đủ',
@@ -200,7 +208,8 @@ export class AiChatbotService {
   ): Promise<ChatResponse> {
     if (!this.geminiService.isAvailable) {
       return {
-        message: 'Xin lỗi, tính năng AI chưa được cấu hình. Vui lòng liên hệ admin.',
+        message:
+          'Xin lỗi, tính năng AI chưa được cấu hình. Vui lòng liên hệ admin.',
         sessionId: sessionId || '',
       };
     }
@@ -237,15 +246,27 @@ export class AiChatbotService {
 
     // 4. Build prompt
     const chatHistory = session.messages.slice(-this.config.chatHistoryLimit);
-    const prompt = this.buildPrompt(message, context, chatHistory, analysis.intent);
+    const prompt = this.buildPrompt(
+      message,
+      context,
+      chatHistory,
+      analysis.intent,
+    );
 
     // 5. Generate response
-    const response = await this.geminiService.generateContent(prompt, GENERATION_SYSTEM);
+    const response = await this.geminiService.generateContent(
+      prompt,
+      GENERATION_SYSTEM,
+    );
 
     // 6. Persist
     session.messages.push(
       { role: 'user', content: message, timestamp: new Date().toISOString() },
-      { role: 'assistant', content: response, timestamp: new Date().toISOString() },
+      {
+        role: 'assistant',
+        content: response,
+        timestamp: new Date().toISOString(),
+      },
     );
     await this.chatSessionRepo.save(session);
 
@@ -263,7 +284,11 @@ export class AiChatbotService {
     sessionId?: string,
   ): AsyncGenerator<{ chunk?: string; metadata?: any; isDone?: boolean }> {
     if (!this.geminiService.isAvailable) {
-      yield { chunk: 'Xin lỗi, tính năng AI chưa được cấu hình. Vui lòng liên hệ admin.', isDone: true };
+      yield {
+        chunk:
+          'Xin lỗi, tính năng AI chưa được cấu hình. Vui lòng liên hệ admin.',
+        isDone: true,
+      };
       return;
     }
 
@@ -305,11 +330,19 @@ export class AiChatbotService {
 
     // 4. Build prompt
     const chatHistory = session.messages.slice(-this.config.chatHistoryLimit);
-    const prompt = this.buildPrompt(message, context, chatHistory, analysis.intent);
+    const prompt = this.buildPrompt(
+      message,
+      context,
+      chatHistory,
+      analysis.intent,
+    );
 
     // 5. Generate stream
-    const stream = await this.geminiService.generateContentStream(prompt, GENERATION_SYSTEM);
-    
+    const stream = await this.geminiService.generateContentStream(
+      prompt,
+      GENERATION_SYSTEM,
+    );
+
     let fullResponse = '';
     for await (const chunk of stream) {
       const chunkText = chunk.text || '';
@@ -322,7 +355,11 @@ export class AiChatbotService {
     // 6. Persist
     session.messages.push(
       { role: 'user', content: message, timestamp: new Date().toISOString() },
-      { role: 'assistant', content: fullResponse, timestamp: new Date().toISOString() },
+      {
+        role: 'assistant',
+        content: fullResponse,
+        timestamp: new Date().toISOString(),
+      },
     );
     await this.chatSessionRepo.save(session);
 
@@ -333,7 +370,12 @@ export class AiChatbotService {
     userId: string,
     page = 1,
     limit = 10,
-  ): Promise<{ data: ChatSession[]; total: number; page: number; limit: number }> {
+  ): Promise<{
+    data: ChatSession[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
     const [data, total] = await this.chatSessionRepo.findAndCount({
       where: { userId, isActive: true },
       order: { createdAt: 'DESC' },
@@ -343,7 +385,10 @@ export class AiChatbotService {
     return { data, total, page, limit };
   }
 
-  async getSession(sessionId: string, userId: string): Promise<ChatSession | null> {
+  async getSession(
+    sessionId: string,
+    userId: string,
+  ): Promise<ChatSession | null> {
     return this.chatSessionRepo.findOne({ where: { id: sessionId, userId } });
   }
 
@@ -383,9 +428,13 @@ export class AiChatbotService {
 
       if (rows.length === 0) return [];
 
-      const ids = rows.map((r: any) => r.source_id.replace('worker_service_', ''));
+      const ids = rows.map((r: any) =>
+        r.source_id.replace('worker_service_', ''),
+      );
 
-      const qb = this.dataSource.getRepository(WorkerServiceEntity).createQueryBuilder('ws')
+      const qb = this.dataSource
+        .getRepository(WorkerServiceEntity)
+        .createQueryBuilder('ws')
         .leftJoin('ws.worker', 'worker')
         .addSelect([
           'worker.id',
@@ -402,8 +451,10 @@ export class AiChatbotService {
 
       const services = await qb.getMany();
 
-      this.logger.debug(`[AI Search] found ${services.length} candidates in database`);
-      return ids.map(id => services.find(s => s.id === id)).filter(Boolean);
+      this.logger.debug(
+        `[AI Search] found ${services.length} candidates in database`,
+      );
+      return ids.map((id) => services.find((s) => s.id === id)).filter(Boolean);
     } catch (error) {
       this.logger.error('AI candidate search failed', error);
       return [];
@@ -462,7 +513,11 @@ export class AiChatbotService {
       );
 
       if (candidateNodes.length === 0) {
-        return { context: graphResult.context, sources: graphResult.sources, references: [] };
+        return {
+          context: graphResult.context,
+          sources: graphResult.sources,
+          references: [],
+        };
       }
 
       const dominantType = this.resolveDominantType(candidateNodes);
@@ -490,7 +545,11 @@ export class AiChatbotService {
     filter: MetadataFilter,
   ): Promise<RetrieveResult> {
     try {
-      const graphResult = await this.graphRagService.retrieve(rawQuery, embedding, filter);
+      const graphResult = await this.graphRagService.retrieve(
+        rawQuery,
+        embedding,
+        filter,
+      );
 
       const references = graphResult.nodes
         .filter(
@@ -527,7 +586,8 @@ export class AiChatbotService {
     for (const n of nodes) {
       const score = (n as { _vectorScore?: number })._vectorScore ?? 0;
       if (n.nodeType === 'job' && score > bestJob) bestJob = score;
-      else if (n.nodeType === 'worker_service' && score > bestWorker) bestWorker = score;
+      else if (n.nodeType === 'worker_service' && score > bestWorker)
+        bestWorker = score;
     }
 
     if (bestJob === -Infinity) return 'worker_service';
@@ -591,7 +651,12 @@ export class AiChatbotService {
     const analysis = await this.analyzeQueryWithTimeout(query);
 
     try {
-      await this.redis.set(cacheKey, JSON.stringify(analysis), 'EX', INTENT_CACHE_TTL);
+      await this.redis.set(
+        cacheKey,
+        JSON.stringify(analysis),
+        'EX',
+        INTENT_CACHE_TTL,
+      );
     } catch {
       /* non-fatal */
     }
@@ -616,7 +681,11 @@ export class AiChatbotService {
 
   private hashQuery(query: string): string {
     const normalized = query.trim().toLowerCase().replace(/\s+/g, ' ');
-    return crypto.createHash('md5').update(normalized).digest('hex').substring(0, 16);
+    return crypto
+      .createHash('md5')
+      .update(normalized)
+      .digest('hex')
+      .substring(0, 16);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -638,10 +707,16 @@ export class AiChatbotService {
 
       if (!result?.intent || !result?.rewritten_query) return fallback;
 
-      const validIntents = ['find_job', 'find_candidate', 'platform_qa', 'general'];
+      const validIntents = [
+        'find_job',
+        'find_candidate',
+        'platform_qa',
+        'general',
+      ];
       const validCategories = ['job_posting', 'worker_profile', null];
       if (!validIntents.includes(result.intent)) return fallback;
-      if (!validCategories.includes(result.category_filter ?? null)) return fallback;
+      if (!validCategories.includes(result.category_filter ?? null))
+        return fallback;
 
       return result;
     } catch (err) {
@@ -709,7 +784,10 @@ export class AiChatbotService {
    * Worker rows → WorkerReference (with price, location from metadata)
    * Platform intent → PlatformLink (smart action links from keyword map)
    */
-  private buildReferences(rows: KnowledgeRow[], analysis: QueryAnalysis): ChatReference[] {
+  private buildReferences(
+    rows: KnowledgeRow[],
+    analysis: QueryAnalysis,
+  ): ChatReference[] {
     const refs: ChatReference[] = [];
     const seen = new Set<string>();
 
@@ -723,8 +801,10 @@ export class AiChatbotService {
           type: 'job',
           title: r.title,
           url: `/jobs/${jobId}`,
-          salary: (r.metadata.salaryDisplay as string | undefined) ?? parsed.salary,
-          location: (r.metadata.location as string | undefined) ?? parsed.location,
+          salary:
+            (r.metadata.salaryDisplay as string | undefined) ?? parsed.salary,
+          location:
+            (r.metadata.location as string | undefined) ?? parsed.location,
           category: r.metadata.categoryName as string | undefined,
         });
       } else if (r.category === 'worker_profile' && r.metadata?.workerId) {
@@ -775,7 +855,10 @@ export class AiChatbotService {
    * Backward-compatible extraction for old embeddings that may not yet include
    * salary/location metadata. Reads canonical lines from stored content text.
    */
-  private parseJobContent(content: string): { salary?: string; location?: string } {
+  private parseJobContent(content: string): {
+    salary?: string;
+    location?: string;
+  } {
     const salaryMatch = content.match(/Lương:\s*([^\n]+)/i);
     const locationMatch = content.match(/Địa điểm:\s*([^\n]+)/i);
     const salary = salaryMatch?.[1]?.trim();
@@ -810,7 +893,9 @@ export class AiChatbotService {
 
     if (chatHistory.length > 0) {
       const historyText = chatHistory
-        .map((m) => `${m.role === 'user' ? 'Người dùng' : 'Trợ lý'}: ${m.content}`)
+        .map(
+          (m) => `${m.role === 'user' ? 'Người dùng' : 'Trợ lý'}: ${m.content}`,
+        )
         .join('\n');
       parts.push(`Lịch sử hội thoại:\n${historyText}\n`);
     }

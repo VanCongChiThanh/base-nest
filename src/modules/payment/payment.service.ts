@@ -59,7 +59,8 @@ export class PaymentService {
       const assignment = await this.assignmentRepo.findOne({
         where: { jobId, status: AssignmentStatus.COMPLETED },
       });
-      if (!assignment) throw new BadRequestException(PAYMENT_ERRORS.PAYMENT_JOB_NOT_COMPLETED);
+      if (!assignment)
+        throw new BadRequestException(PAYMENT_ERRORS.PAYMENT_JOB_NOT_COMPLETED);
       workerId = assignment.workerId;
     } else {
       workerId = userId;
@@ -97,9 +98,10 @@ export class PaymentService {
       payment.confirmedByEmployer = true;
     } else {
       payment.confirmedByWorker = true;
+      payment.confirmedByEmployer = true;
       payment.confirmedAt = new Date();
     }
-    
+
     if (dto.note) {
       payment.note = payment.note ? `${payment.note}\n${dto.note}` : dto.note;
     }
@@ -108,7 +110,10 @@ export class PaymentService {
     if (payment.confirmedByWorker && payment.confirmedByEmployer) {
       payment.status = PaymentStatus.PAYMENT_CONFIRMED;
       // Also update job to SETTLED
-      await this.jobRepo.update({ id: jobId }, { status: JobStatus.SETTLED as any });
+      await this.jobRepo.update(
+        { id: jobId },
+        { status: JobStatus.SETTLED as any },
+      );
     } else {
       payment.status = PaymentStatus.PENDING; // Still pending until both confirm
     }

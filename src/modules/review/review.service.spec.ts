@@ -47,7 +47,10 @@ describe('ReviewService', () => {
       providers: [
         ReviewService,
         { provide: getRepositoryToken(Review), useValue: mockReviewRepo },
-        { provide: getRepositoryToken(JobAssignment), useValue: mockAssignmentRepo },
+        {
+          provide: getRepositoryToken(JobAssignment),
+          useValue: mockAssignmentRepo,
+        },
         { provide: NotificationHelper, useValue: mockNotificationHelper },
       ],
     }).compile();

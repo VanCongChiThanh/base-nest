@@ -11,10 +11,7 @@ import { Repository } from 'typeorm';
 import { VerificationLevel, VerificationStatus } from '../../common/enums';
 import ekycConfig from '../../config/ekyc.config';
 import { User } from '../user/entities';
-import {
-  VerificationRequest,
-  EkycResult,
-} from '../verification/entities';
+import { VerificationRequest, EkycResult } from '../verification/entities';
 import { CompleteEkycDto, VerifySignatureDto } from './dto';
 import { DeepPartial } from 'typeorm';
 
@@ -154,42 +151,66 @@ export class EkycService {
       string,
       unknown
     > | null;
-    const ocr = this.extractNestedObject(decoded, 'object') ||
-      this.extractNestedObject(decoded, 'ocr') || {};
+    const ocr =
+      this.extractNestedObject(decoded, 'object') ||
+      this.extractNestedObject(decoded, 'ocr') ||
+      {};
     const compare = this.extractNestedObject(decoded, 'compare') || {};
     const liveness = this.extractNestedObject(decoded, 'liveness') || {};
 
     // ─── Validate image quality and liveness ───
     const warningMsg = this.safeString(ocr.warning_msg) || '';
     const checkingWarning = warningMsg.toLowerCase();
-    if (checkingWarning.includes('mờ') || checkingWarning.includes('nhòe') || checkingWarning.includes('nhoè')) {
-      throw new BadRequestException('Ảnh giấy tờ tùy thân quá mờ hoặc nhòe. Vui lòng chụp lại ảnh rõ nét hơn.');
+    if (
+      checkingWarning.includes('mờ') ||
+      checkingWarning.includes('nhòe') ||
+      checkingWarning.includes('nhoè')
+    ) {
+      throw new BadRequestException(
+        'Ảnh giấy tờ tùy thân quá mờ hoặc nhòe. Vui lòng chụp lại ảnh rõ nét hơn.',
+      );
     }
     if (checkingWarning.includes('chói') || checkingWarning.includes('lóa')) {
-      throw new BadRequestException('Ảnh giấy tờ tùy thân bị chói sáng. Vui lòng chụp lại.');
+      throw new BadRequestException(
+        'Ảnh giấy tờ tùy thân bị chói sáng. Vui lòng chụp lại.',
+      );
     }
 
     // Nâng cấp: check thông số quality từ VNPT
     const qualityFront = ocr.quality_front as Record<string, any>;
     const qualityBack = ocr.quality_back as Record<string, any>;
-    
-    if (qualityFront?.final_result?.blurred_likelihood === 'likely' || qualityBack?.final_result?.blurred_likelihood === 'likely') {
-      throw new BadRequestException('Hình ảnh giấy tờ bị mờ. Vui lòng chụp lại cho rõ viền và chữ.');
+
+    if (
+      qualityFront?.final_result?.blurred_likelihood === 'likely' ||
+      qualityBack?.final_result?.blurred_likelihood === 'likely'
+    ) {
+      throw new BadRequestException(
+        'Hình ảnh giấy tờ bị mờ. Vui lòng chụp lại cho rõ viền và chữ.',
+      );
     }
-    
-    if (qualityFront?.final_result?.bad_luminance_likelihood === 'likely' || qualityBack?.final_result?.bad_luminance_likelihood === 'likely') {
-      throw new BadRequestException('Lỗi ánh sáng (quá chói hoặc quá tối). Vui lòng chụp lại giấy tờ.');
+
+    if (
+      qualityFront?.final_result?.bad_luminance_likelihood === 'likely' ||
+      qualityBack?.final_result?.bad_luminance_likelihood === 'likely'
+    ) {
+      throw new BadRequestException(
+        'Lỗi ánh sáng (quá chói hoặc quá tối). Vui lòng chụp lại giấy tờ.',
+      );
     }
 
     const ocrValid = ocr.valid;
     if (ocrValid === false || ocrValid === 'False') {
-      throw new BadRequestException('Trích xuất thông tin thất bại hoặc giấy tờ không hợp lệ. Vui lòng thử lại.');
+      throw new BadRequestException(
+        'Trích xuất thông tin thất bại hoặc giấy tờ không hợp lệ. Vui lòng thử lại.',
+      );
     }
 
     // ─── Check duplicate CCCD ───
     const idNumber = this.safeString(ocr.id);
     if (!idNumber) {
-      throw new BadRequestException('Không nhận diện được số CCCD/CMND từ ảnh.');
+      throw new BadRequestException(
+        'Không nhận diện được số CCCD/CMND từ ảnh.',
+      );
     }
 
     const existingEkyc = await this.ekycResultRepository.findOne({
@@ -197,7 +218,9 @@ export class EkycService {
     });
 
     if (existingEkyc && existingEkyc.userId !== userId) {
-      throw new BadRequestException('Số CCCD/CMND này đã được sử dụng để xác thực cho một tài khoản khác.');
+      throw new BadRequestException(
+        'Số CCCD/CMND này đã được sử dụng để xác thực cho một tài khoản khác.',
+      );
     }
 
     // ─── Save EkycResult (OCR data in dedicated table) ───
@@ -222,8 +245,8 @@ export class EkycService {
         liveness.face_liveness || ocr.face_liveness,
       ),
       maskedFaceResult: this.safeString(ocr.masked),
-      rawOcrPayload: ocr as Record<string, unknown>,
-      rawComparePayload: compare as Record<string, unknown>,
+      rawOcrPayload: ocr,
+      rawComparePayload: compare,
       rawFullPayload: decoded as Record<string, unknown>,
       dataBase64: payload.dataBase64,
       dataSignature: payload.dataSign,
@@ -244,7 +267,9 @@ export class EkycService {
       reviewedAt: new Date(),
     };
 
-    const verificationRequest = this.verificationRequestRepository.create(verificationRequestData);
+    const verificationRequest = this.verificationRequestRepository.create(
+      verificationRequestData,
+    );
     await this.verificationRequestRepository.save(verificationRequest);
 
     // ─── Update user verification level ───

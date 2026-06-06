@@ -28,7 +28,7 @@ export interface GraphRetrieveResult {
 // ─── Reranker scoring weights ─────────────────────────────────────────────────
 const RERANK_WEIGHTS = {
   vectorScore: 0.5,
-  ratingBoost: 0.25,   // avgRating / 5
+  ratingBoost: 0.25, // avgRating / 5
   completedBoost: 0.15, // log(completedCount+1) normalized
   availableBoost: 0.1,
 };
@@ -136,7 +136,10 @@ export class GraphRagService {
     );
     if (!rows.length) {
       // Job was deleted, deactivate existing node if any
-      await this.graphRepo.update({ sourceId: `job_${jobId}` }, { isActive: false, isAvailable: false });
+      await this.graphRepo.update(
+        { sourceId: `job_${jobId}` },
+        { isActive: false, isAvailable: false },
+      );
       return false;
     }
     const row = rows[0];
@@ -154,8 +157,10 @@ export class GraphRagService {
     // Keep syncing when embedding is missing so failed/partial old runs can self-heal.
     // Without this, rows with NULL embedding are permanently skipped if content is unchanged.
     const needsEmbeddingBackfill =
-      !!existing && (!Array.isArray(existing.embedding) || existing.embedding.length === 0);
-    if (existing?.contentHash === contentHash && !needsEmbeddingBackfill) return false; // No change
+      !!existing &&
+      (!Array.isArray(existing.embedding) || existing.embedding.length === 0);
+    if (existing?.contentHash === contentHash && !needsEmbeddingBackfill)
+      return false; // No change
 
     const edges = this.buildJobEdges(row);
 
@@ -209,7 +214,10 @@ export class GraphRagService {
       [workerServiceId],
     );
     if (!rows.length) {
-      await this.graphRepo.update({ sourceId: `worker_service_${workerServiceId}` }, { isActive: false, isAvailable: false });
+      await this.graphRepo.update(
+        { sourceId: `worker_service_${workerServiceId}` },
+        { isActive: false, isAvailable: false },
+      );
       return false;
     }
     const row = rows[0];
@@ -235,8 +243,10 @@ export class GraphRagService {
 
     const existing = await this.graphRepo.findOne({ where: { sourceId } });
     const needsEmbeddingBackfill =
-      !!existing && (!Array.isArray(existing.embedding) || existing.embedding.length === 0);
-    if (existing?.contentHash === contentHash && !needsEmbeddingBackfill) return false;
+      !!existing &&
+      (!Array.isArray(existing.embedding) || existing.embedding.length === 0);
+    if (existing?.contentHash === contentHash && !needsEmbeddingBackfill)
+      return false;
 
     const edges = this.buildWorkerEdges(row, skillNames);
 
@@ -272,13 +282,27 @@ export class GraphRagService {
   // PUBLIC: FAQ / Guide / Policy CRUD (admin)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  static readonly FAQ_NODE_TYPES = ['faq', 'guide', 'policy', 'safety', 'general'] as const;
+  static readonly FAQ_NODE_TYPES = [
+    'faq',
+    'guide',
+    'policy',
+    'safety',
+    'general',
+  ] as const;
 
-  async listFaqNodes(): Promise<{
-    id: string; sourceId: string; nodeType: string; title: string;
-    content: string; hasEmbedding: boolean; isActive: boolean;
-    createdAt: string; updatedAt: string;
-  }[]> {
+  async listFaqNodes(): Promise<
+    {
+      id: string;
+      sourceId: string;
+      nodeType: string;
+      title: string;
+      content: string;
+      hasEmbedding: boolean;
+      isActive: boolean;
+      createdAt: string;
+      updatedAt: string;
+    }[]
+  > {
     const rows = await this.dataSource.query(
       `SELECT id, source_id, node_type, title, content,
               (embedding IS NOT NULL) AS has_embedding,
@@ -309,7 +333,11 @@ export class GraphRagService {
   }): Promise<{ id: string; sourceId: string }> {
     const sourceId = data.id
       ? undefined
-      : `faq_${data.title.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 80)}`;
+      : `faq_${data.title
+          .toLowerCase()
+          .replace(/\s+/g, '_')
+          .replace(/[^a-z0-9_]/g, '')
+          .slice(0, 80)}`;
 
     const content = `${data.title}\n${data.content}`;
     const contentHash = this.hash(content);
@@ -322,7 +350,9 @@ export class GraphRagService {
     } catch (err: any) {
       this.logger.warn(`[FAQ] Embed failed: ${err?.message}`);
     }
-    const vectorStr = embeddingVector.length ? `[${embeddingVector.join(',')}]` : null;
+    const vectorStr = embeddingVector.length
+      ? `[${embeddingVector.join(',')}]`
+      : null;
 
     if (data.id) {
       await this.dataSource.query(
@@ -332,7 +362,14 @@ export class GraphRagService {
              is_active = true, updated_at = NOW()
          WHERE id = $${vectorStr ? 6 : 5}`,
         vectorStr
-          ? [data.title, content, data.nodeType, contentHash, vectorStr, data.id]
+          ? [
+              data.title,
+              content,
+              data.nodeType,
+              contentHash,
+              vectorStr,
+              data.id,
+            ]
           : [data.title, content, data.nodeType, contentHash, data.id],
       );
       await this.invalidateCache('faq');
@@ -385,7 +422,9 @@ export class GraphRagService {
 
     if (rows.length === 0) return 0;
 
-    this.logger.log(`[GraphRAG] Backfilling embeddings for ${rows.length} FAQ/guide nodes`);
+    this.logger.log(
+      `[GraphRAG] Backfilling embeddings for ${rows.length} FAQ/guide nodes`,
+    );
     let synced = 0;
 
     for (const row of rows) {
@@ -401,11 +440,15 @@ export class GraphRagService {
         synced++;
         await new Promise((r) => setTimeout(r, 300));
       } catch (err: any) {
-        this.logger.warn(`[GraphRAG] FAQ embed failed for ${row.source_id}: ${err?.message}`);
+        this.logger.warn(
+          `[GraphRAG] FAQ embed failed for ${row.source_id}: ${err?.message}`,
+        );
       }
     }
 
-    this.logger.log(`[GraphRAG] FAQ backfill done: ${synced}/${rows.length} embedded`);
+    this.logger.log(
+      `[GraphRAG] FAQ backfill done: ${synced}/${rows.length} embedded`,
+    );
     return synced;
   }
 
@@ -467,12 +510,17 @@ export class GraphRagService {
           edges: r.edges ?? [],
           metadata: r.metadata ?? {},
           // attach vector_score for reranking
-          ...(r.vector_score !== undefined ? { _vectorScore: Number(r.vector_score) } : {}),
+          ...(r.vector_score !== undefined
+            ? { _vectorScore: Number(r.vector_score) }
+            : {}),
         });
         return node;
       });
     } catch (err: any) {
-      this.logger.warn('[GraphRAG] vectorSearchWithFilter failed', err?.message);
+      this.logger.warn(
+        '[GraphRAG] vectorSearchWithFilter failed',
+        err?.message,
+      );
       return [];
     }
   }
@@ -524,12 +572,17 @@ export class GraphRagService {
   // PRIVATE: Lightweight Reranker
   // ═══════════════════════════════════════════════════════════════════════════
 
-  private rerank(nodes: GraphKnowledge[], _embedding: number[]): GraphKnowledge[] {
+  private rerank(
+    nodes: GraphKnowledge[],
+    _embedding: number[],
+  ): GraphKnowledge[] {
     const scored = nodes.map((n) => {
       const vectorScore = (n as any)._vectorScore ?? 0;
       const ratingBoost = (Number(n.avgRating) || 0) / 5;
-      const completedBoost =
-        Math.min(Math.log((Number(n.completedCount) || 0) + 1) / 4, 1);
+      const completedBoost = Math.min(
+        Math.log((Number(n.completedCount) || 0) + 1) / 4,
+        1,
+      );
       const availableBoost = n.isAvailable ? 1 : 0;
 
       const score =
@@ -570,7 +623,11 @@ export class GraphRagService {
       .join('\n');
   }
 
-  private buildWorkerContent(row: any, skillNames: string[], priceDisplay: string): string {
+  private buildWorkerContent(
+    row: any,
+    skillNames: string[],
+    priceDisplay: string,
+  ): string {
     return [
       `Dịch vụ / Sẵn sàng làm: ${row.title}`,
       `Mô tả: ${row.description}`,
@@ -590,10 +647,13 @@ export class GraphRagService {
 
   private buildNodeContext(node: GraphKnowledge): string {
     const type = node.nodeType === 'job' ? 'JOB' : 'WORKER';
-    const rating = node.avgRating ? ` | ⭐${Number(node.avgRating).toFixed(1)}` : '';
+    const rating = node.avgRating
+      ? ` | ⭐${Number(node.avgRating).toFixed(1)}`
+      : '';
     const price = node.priceDisplay ? ` | ${node.priceDisplay}` : '';
-    const skills =
-      node.skillNames?.length ? ` | Kỹ năng: ${node.skillNames.join(', ')}` : '';
+    const skills = node.skillNames?.length
+      ? ` | Kỹ năng: ${node.skillNames.join(', ')}`
+      : '';
     return `[${type}] ${node.title}${rating}${price}${skills}\n${node.content}`;
   }
 
@@ -604,20 +664,45 @@ export class GraphRagService {
   private buildJobEdges(row: any) {
     const edges: any[] = [];
     if (row.category_id)
-      edges.push({ type: 'IN_CATEGORY', targetId: row.category_id, targetType: 'category', label: row.category_name });
+      edges.push({
+        type: 'IN_CATEGORY',
+        targetId: row.category_id,
+        targetType: 'category',
+        label: row.category_name,
+      });
     if (row.employer_id)
-      edges.push({ type: 'POSTED_BY', targetId: row.employer_id, targetType: 'user', label: row.owner_name });
+      edges.push({
+        type: 'POSTED_BY',
+        targetId: row.employer_id,
+        targetType: 'user',
+        label: row.owner_name,
+      });
     return edges;
   }
 
   private buildWorkerEdges(row: any, skillNames: string[]) {
     const edges: any[] = [];
     if (row.category_id)
-      edges.push({ type: 'IN_CATEGORY', targetId: row.category_id, targetType: 'category', label: row.category_name });
+      edges.push({
+        type: 'IN_CATEGORY',
+        targetId: row.category_id,
+        targetType: 'category',
+        label: row.category_name,
+      });
     if (row.worker_id)
-      edges.push({ type: 'OFFERED_BY', targetId: row.worker_id, targetType: 'user', label: row.owner_name });
+      edges.push({
+        type: 'OFFERED_BY',
+        targetId: row.worker_id,
+        targetType: 'user',
+        label: row.owner_name,
+      });
     skillNames.forEach((s) =>
-      edges.push({ type: 'HAS_SKILL', targetId: s, targetType: 'skill', label: s }),
+      edges.push({
+        type: 'HAS_SKILL',
+        targetId: s,
+        targetType: 'skill',
+        label: s,
+      }),
     );
     return edges;
   }
@@ -638,10 +723,15 @@ export class GraphRagService {
         embeddingVector = await this.geminiService.embedText(node.content);
       }
     } catch (err: any) {
-      this.logger.warn(`[GraphRAG] Embedding failed for ${sourceId}`, err?.message);
+      this.logger.warn(
+        `[GraphRAG] Embedding failed for ${sourceId}`,
+        err?.message,
+      );
     }
 
-    const vectorStr = embeddingVector.length ? `[${embeddingVector.join(',')}]` : null;
+    const vectorStr = embeddingVector.length
+      ? `[${embeddingVector.join(',')}]`
+      : null;
     const meta = { sourceId, nodeType: node.nodeType };
 
     if (existingId) {
@@ -657,19 +747,53 @@ export class GraphRagService {
              updated_at=NOW()
          WHERE id=$${vectorStr ? 22 : 21}`,
         vectorStr
-          ? [node.title, node.content, node.categoryName, node.categoryId,
-             JSON.stringify(node.skillNames), node.provinceCode, node.wardCode,
-             node.address, node.priceNumeric, node.priceDisplay, node.avgRating,
-             node.reviewCount, node.completedCount, node.isAvailable,
-             node.ownerId, node.ownerName, JSON.stringify(node.edges),
-             JSON.stringify(meta), node.contentHash, node.isActive,
-             vectorStr, existingId]
-          : [node.title, node.content, node.categoryName, node.categoryId,
-             JSON.stringify(node.skillNames), node.provinceCode, node.wardCode,
-             node.address, node.priceNumeric, node.priceDisplay, node.avgRating,
-             node.reviewCount, node.completedCount, node.isAvailable,
-             node.ownerId, node.ownerName, JSON.stringify(node.edges),
-             JSON.stringify(meta), node.contentHash, node.isActive, existingId],
+          ? [
+              node.title,
+              node.content,
+              node.categoryName,
+              node.categoryId,
+              JSON.stringify(node.skillNames),
+              node.provinceCode,
+              node.wardCode,
+              node.address,
+              node.priceNumeric,
+              node.priceDisplay,
+              node.avgRating,
+              node.reviewCount,
+              node.completedCount,
+              node.isAvailable,
+              node.ownerId,
+              node.ownerName,
+              JSON.stringify(node.edges),
+              JSON.stringify(meta),
+              node.contentHash,
+              node.isActive,
+              vectorStr,
+              existingId,
+            ]
+          : [
+              node.title,
+              node.content,
+              node.categoryName,
+              node.categoryId,
+              JSON.stringify(node.skillNames),
+              node.provinceCode,
+              node.wardCode,
+              node.address,
+              node.priceNumeric,
+              node.priceDisplay,
+              node.avgRating,
+              node.reviewCount,
+              node.completedCount,
+              node.isAvailable,
+              node.ownerId,
+              node.ownerName,
+              JSON.stringify(node.edges),
+              JSON.stringify(meta),
+              node.contentHash,
+              node.isActive,
+              existingId,
+            ],
       );
     } else {
       await this.dataSource.query(
@@ -684,18 +808,55 @@ export class GraphRagService {
             ${vectorStr ? '$23::vector' : 'NULL'},
             NOW(), NOW())`,
         vectorStr
-          ? [node.nodeType, sourceId, node.title, node.content,
-             node.categoryName, node.categoryId, JSON.stringify(node.skillNames),
-             node.provinceCode, node.wardCode, node.address, node.priceNumeric,
-             node.priceDisplay, node.avgRating, node.reviewCount, node.completedCount,
-             node.isAvailable, node.ownerId, node.ownerName, JSON.stringify(node.edges),
-             JSON.stringify(meta), node.contentHash, node.isActive, vectorStr]
-          : [node.nodeType, sourceId, node.title, node.content,
-             node.categoryName, node.categoryId, JSON.stringify(node.skillNames),
-             node.provinceCode, node.wardCode, node.address, node.priceNumeric,
-             node.priceDisplay, node.avgRating, node.reviewCount, node.completedCount,
-             node.isAvailable, node.ownerId, node.ownerName, JSON.stringify(node.edges),
-             JSON.stringify(meta), node.contentHash, node.isActive],
+          ? [
+              node.nodeType,
+              sourceId,
+              node.title,
+              node.content,
+              node.categoryName,
+              node.categoryId,
+              JSON.stringify(node.skillNames),
+              node.provinceCode,
+              node.wardCode,
+              node.address,
+              node.priceNumeric,
+              node.priceDisplay,
+              node.avgRating,
+              node.reviewCount,
+              node.completedCount,
+              node.isAvailable,
+              node.ownerId,
+              node.ownerName,
+              JSON.stringify(node.edges),
+              JSON.stringify(meta),
+              node.contentHash,
+              node.isActive,
+              vectorStr,
+            ]
+          : [
+              node.nodeType,
+              sourceId,
+              node.title,
+              node.content,
+              node.categoryName,
+              node.categoryId,
+              JSON.stringify(node.skillNames),
+              node.provinceCode,
+              node.wardCode,
+              node.address,
+              node.priceNumeric,
+              node.priceDisplay,
+              node.avgRating,
+              node.reviewCount,
+              node.completedCount,
+              node.isAvailable,
+              node.ownerId,
+              node.ownerName,
+              JSON.stringify(node.edges),
+              JSON.stringify(meta),
+              node.contentHash,
+              node.isActive,
+            ],
       );
     }
 

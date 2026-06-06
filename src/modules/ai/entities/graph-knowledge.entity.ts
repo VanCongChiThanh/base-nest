@@ -58,8 +58,7 @@ export class GraphKnowledge {
     type: 'text',
     nullable: true,
     transformer: {
-      to: (value: number[] | null) =>
-        value ? `[${value.join(',')}]` : null,
+      to: (value: number[] | null) => (value ? `[${value.join(',')}]` : null),
       from: (value: string | null) => {
         if (!value) return null;
         const clean = value.replace(/[\[\]]/g, '');
@@ -96,7 +95,13 @@ export class GraphKnowledge {
   address: string;
 
   /** Salary/price numeric for range filtering */
-  @Column({ name: 'price_numeric', type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({
+    name: 'price_numeric',
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    nullable: true,
+  })
   priceNumeric: number;
 
   /** Display-friendly salary/price string */
@@ -104,7 +109,13 @@ export class GraphKnowledge {
   priceDisplay: string;
 
   /** Average rating (precomputed from reviews) */
-  @Column({ name: 'avg_rating', type: 'decimal', precision: 3, scale: 2, nullable: true })
+  @Column({
+    name: 'avg_rating',
+    type: 'decimal',
+    precision: 3,
+    scale: 2,
+    nullable: true,
+  })
   avgRating: number;
 
   /** Number of reviews */
@@ -155,8 +166,8 @@ export class GraphKnowledge {
 }
 
 export interface GraphEdge {
-  type: string;       // 'HAS_SKILL' | 'IN_CATEGORY' | 'LOCATED_IN' | 'POSTED_BY' | 'COMPLETED_BY'
+  type: string; // 'HAS_SKILL' | 'IN_CATEGORY' | 'LOCATED_IN' | 'POSTED_BY' | 'COMPLETED_BY'
   targetId: string;
   targetType: string; // 'skill' | 'category' | 'location' | 'user'
-  label: string;      // Human readable
+  label: string; // Human readable
 }

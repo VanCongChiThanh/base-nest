@@ -8,6 +8,7 @@ import {
   Query,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { JOB_ERRORS, BadRequestException } from '../../common';
 import { JobService } from './job.service';
 import { ApplicationChatService } from './application-chat.service';
 import {
@@ -17,7 +18,7 @@ import {
   CheckInJobDto,
   PostApplicationMessageDto,
 } from './dto';
-import { Role } from '../../common/enums';
+import { Role, VerificationLevel } from '../../common/enums';
 import {
   ConsumeQuota,
   CurrentUser,
@@ -42,7 +43,12 @@ export class JobController {
     period: 'monthly',
   })
   async createJob(@CurrentUser() user: User, @Body() dto: CreateJobDto) {
-    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    if (user.role !== Role.RECRUITER && user.verificationLevel === VerificationLevel.NONE) {
+      throw new BadRequestException(JOB_ERRORS.JOB_REQUIRE_EKYC);
+    }
+
+    const employerId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     const postedById = user.role === Role.RECRUITER ? user.id : null;
     return this.jobService.createJob(employerId, postedById, dto);
   }
@@ -98,7 +104,8 @@ export class JobController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const employerId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.getJobApplications(id, employerId, page, limit);
   }
 
@@ -107,7 +114,8 @@ export class JobController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,
   ) {
-    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const employerId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.acceptApplication(id, employerId);
   }
 
@@ -125,7 +133,8 @@ export class JobController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,
   ) {
-    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const employerId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.rejectApplication(id, employerId);
   }
 
@@ -137,7 +146,8 @@ export class JobController {
     @CurrentUser() user: User,
     @Body('workerId') workerId: string,
   ) {
-    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const employerId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.inviteWorkerToJob(employerId, id, workerId);
   }
 
@@ -204,7 +214,8 @@ export class JobController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const employerId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.findEmployerJobs(employerId, page, limit);
   }
 
@@ -213,7 +224,8 @@ export class JobController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,
   ) {
-    const employerId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const employerId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.jobService.cancelJob(id, employerId);
   }
 
@@ -223,7 +235,11 @@ export class JobController {
     @CurrentUser() user: User,
     @Body('proposedPrice') proposedPrice: number,
   ) {
-    const app = await this.jobService.negotiateDirectHirePrice(id, user.id, proposedPrice);
+    const app = await this.jobService.negotiateDirectHirePrice(
+      id,
+      user.id,
+      proposedPrice,
+    );
     const formattedPrice = Number(proposedPrice).toLocaleString('vi-VN');
     await this.applicationChatService.postMessage(
       app.id,
@@ -260,7 +276,9 @@ export class JobController {
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @CurrentUser() user: User,
   ) {
-    return this.jobService.completeJobByEmployer(jobId, user.id);
+    const actorId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.jobService.completeJobByEmployer(jobId, actorId);
   }
 
   /** Worker mark assignment as complete */
@@ -269,7 +287,9 @@ export class JobController {
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @CurrentUser() user: User,
   ) {
-    return this.jobService.completeJob(jobId, user.id);
+    const actorId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.jobService.completeJob(jobId, actorId);
   }
   /** Hourly Workflow: Log Hours */
   @Post('jobs/:jobId/log-hours')
@@ -278,7 +298,9 @@ export class JobController {
     @CurrentUser() user: User,
     @Body() dto: { loggedHours: number },
   ) {
-    return this.jobService.logHours(jobId, user.id, dto.loggedHours);
+    const actorId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.jobService.logHours(jobId, actorId, dto.loggedHours);
   }
 
   /** Hourly Workflow: Confirm Hours */
@@ -287,7 +309,9 @@ export class JobController {
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @CurrentUser() user: User,
   ) {
-    return this.jobService.confirmHours(jobId, user.id);
+    const actorId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.jobService.confirmHours(jobId, actorId);
   }
 
   /** Hourly Workflow: Mark Paid (P2P Employer) */
@@ -296,7 +320,9 @@ export class JobController {
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @CurrentUser() user: User,
   ) {
-    return this.jobService.markPaid(jobId, user.id);
+    const actorId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.jobService.markPaid(jobId, actorId);
   }
 
   /** Hourly Workflow: Confirm Payment Receipt (P2P Worker) */
@@ -305,6 +331,8 @@ export class JobController {
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @CurrentUser() user: User,
   ) {
-    return this.jobService.confirmPaymentReceipt(jobId, user.id);
+    const actorId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
+    return this.jobService.confirmPaymentReceipt(jobId, actorId);
   }
 }

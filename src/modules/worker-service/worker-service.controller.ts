@@ -1,6 +1,21 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { WorkerServiceService } from './worker-service.service';
-import { CreateWorkerServiceDto, UpdateWorkerServiceDto, WorkerServiceQueryDto, DirectHireDto } from './dto';
+import {
+  CreateWorkerServiceDto,
+  UpdateWorkerServiceDto,
+  WorkerServiceQueryDto,
+  DirectHireDto,
+} from './dto';
 import { CurrentUser, JwtAuthGuard } from '../../common'; // adjust based on actual import paths
 import { User } from '../user/entities/user.entity';
 

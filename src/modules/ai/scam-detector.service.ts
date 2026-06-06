@@ -20,6 +20,7 @@ interface JobContent {
   salary?: number;
   salaryText?: string;
   address?: string;
+  paymentMethod?: string;
 }
 
 // ─── Rule-based scoring weights ───
@@ -31,7 +32,10 @@ const RULE_CHECKS: Array<{
 }> = [
   {
     name: 'excessive_salary',
-    check: (job) => !!job.salary && (!job.salaryText || job.salaryText.includes('giờ')) && job.salary > 200000,
+    check: (job) =>
+      !!job.salary &&
+      (!job.salaryText || job.salaryText.includes('giờ')) &&
+      job.salary > 200000,
     score: 25,
     reason: 'Mức lương cao bất thường (>200,000₫/giờ) cho công việc thời vụ',
   },
@@ -39,16 +43,21 @@ const RULE_CHECKS: Array<{
     name: 'deposit_required',
     check: (job) => {
       const text = `${job.title} ${job.description}`.toLowerCase();
-      return /đặt cọc|tiền cọc|phí giữ chỗ|chuyển khoản trước|đóng tiền/.test(text);
+      return /đặt cọc|tiền cọc|phí giữ chỗ|chuyển khoản trước|đóng tiền/.test(
+        text,
+      );
     },
     score: 35,
-    reason: 'Yêu cầu đặt cọc hoặc chuyển khoản trước — dấu hiệu lừa đảo phổ biến nhất',
+    reason:
+      'Yêu cầu đặt cọc hoặc chuyển khoản trước — dấu hiệu lừa đảo phổ biến nhất',
   },
   {
     name: 'personal_info_request',
     check: (job) => {
       const text = `${job.title} ${job.description}`.toLowerCase();
-      return /số cmnd|cccd|số tài khoản|mật khẩu|otp|pin|chứng minh nhân dân/.test(text);
+      return /số cmnd|cccd|số tài khoản|mật khẩu|otp|pin|chứng minh nhân dân/.test(
+        text,
+      );
     },
     score: 30,
     reason: 'Yêu cầu thông tin cá nhân nhạy cảm (CMND, số tài khoản, OTP)',
@@ -69,7 +78,9 @@ const RULE_CHECKS: Array<{
     name: 'pyramid_keywords',
     check: (job) => {
       const text = `${job.title} ${job.description}`.toLowerCase();
-      return /thu nhập thụ động|đa cấp|mlm|tuyến dưới|hệ thống|network marketing/.test(text);
+      return /thu nhập thụ động|đa cấp|mlm|tuyến dưới|hệ thống|network marketing/.test(
+        text,
+      );
     },
     score: 30,
     reason: 'Chứa từ khóa liên quan đến mô hình đa cấp/kim tự tháp',
@@ -87,10 +98,13 @@ const RULE_CHECKS: Array<{
     name: 'too_good_to_be_true',
     check: (job) => {
       const text = `${job.title} ${job.description}`.toLowerCase();
-      return /không cần kinh nghiệm.*thu nhập cao|dễ dàng.*triệu|chỉ cần.*điện thoại/.test(text);
+      return /không cần kinh nghiệm.*thu nhập cao|dễ dàng.*triệu|chỉ cần.*điện thoại/.test(
+        text,
+      );
     },
     score: 20,
-    reason: 'Hứa hẹn "quá tốt để là sự thật" — thu nhập cao mà không yêu cầu kỹ năng',
+    reason:
+      'Hứa hẹn "quá tốt để là sự thật" — thu nhập cao mà không yêu cầu kỹ năng',
   },
   {
     name: 'no_company_info',
@@ -102,16 +116,18 @@ const RULE_CHECKS: Array<{
     name: 'suspicious_contact',
     check: (job) => {
       const text = `${job.title} ${job.description}`.toLowerCase();
-      return /zalo|telegram|whatsapp|liên hệ qua/.test(text) &&
-        /thu nhập|lương|triệu/.test(text);
+      return (
+        /zalo|telegram|whatsapp|liên hệ qua/.test(text) &&
+        /thu nhập|lương|triệu/.test(text)
+      );
     },
     score: 15,
     reason: 'Yêu cầu liên hệ qua kênh riêng kết hợp hứa hẹn thu nhập cao',
   },
 ];
 
-const SCAM_ANALYSIS_PROMPT = `Bạn là chuyên gia phân tích tin tuyển dụng lừa đảo tại Việt Nam.
-Hãy phân tích tin tuyển dụng sau và trả về kết quả dạng JSON (KHÔNG có markdown code block):
+const SCAM_ANALYSIS_PROMPT = `Bạn là chuyên gia phân tích chất lượng tin tuyển dụng tại Việt Nam.
+Hãy phân tích tin tuyển dụng sau và trả về kết quả định dạng JSON (KHÔNG có markdown code block):
 
 {
   "isScam": true/false,
@@ -120,14 +136,14 @@ Hãy phân tích tin tuyển dụng sau và trả về kết quả dạng JSON (
   "recommendation": "lời khuyên cho người tìm việc"
 }
 
-Các dấu hiệu cần chú ý:
-- Yêu cầu đặt cọc/chuyển khoản
-- Lương cao bất thường so với công việc
-- Thiếu thông tin công ty
-- Yêu cầu thông tin cá nhân nhạy cảm
-- Mô hình đa cấp/kim tự tháp
-- Mô tả mơ hồ, thiếu chi tiết
-- Áp lực thời gian (gấp, ngay lập tức)
+LƯU Ý QUAN TRỌNG:
+- Nền tảng ĐÃ YÊU CẦU XÁC THỰC DANH TÍNH (eKYC) với người đăng bài, nên rủi ro lừa đảo lấy cắp thông tin giả mạo là RẤT THẤP. Tuyệt đối KHÔNG kết luận quá tiêu cực (ví dụ: "tin giả mạo lấy cắp thông tin") trừ khi có bằng chứng cực kỳ rõ ràng như bắt đóng tiền cọc.
+- Thay vào đó, hãy tập trung phân tích CHẤT LƯỢNG tin đăng:
+  + Mô tả công việc có quá ngắn, sơ sài, ký tự rác không?
+  + Tên công ty hoặc địa chỉ có hợp lệ không? (ví dụ các chuỗi như 'fdsf', 'asdf' là ký tự rác).
+  + Mức lương có bất thường (quá cao hoặc quá thấp) so với tính chất công việc không?
+- Đưa ra điểm confidence (độ cảnh báo từ 0-100, điểm càng cao thì tin đăng càng kém chất lượng hoặc rủi ro).
+- Phần recommendation hãy ưu tiên nhắc nhở ứng viên trao đổi kỹ nội dung công việc. Đặc biệt nếu công việc là thanh toán trực tiếp bên ngoài nền tảng, hãy nhắc nhở ứng viên thỏa thuận rõ ràng và cẩn trọng để tránh rủi ro quỵt lương.
 `;
 
 @Injectable()
@@ -156,7 +172,11 @@ export class ScamDetectorService {
     const patternResult = await this.matchScamPatterns(job);
 
     // 3. AI analysis (only if Gemini is available)
-    let aiResult = { confidence: 0, reasons: [] as string[], recommendation: '' };
+    let aiResult = {
+      confidence: 0,
+      reasons: [] as string[],
+      recommendation: '',
+    };
     if (this.geminiService.isAvailable) {
       aiResult = await this.runAiAnalysis(job);
     }
@@ -166,8 +186,8 @@ export class ScamDetectorService {
       100,
       Math.round(
         ruleResult.score * 0.4 +
-        patternResult.score * 0.3 +
-        aiResult.confidence * 0.3,
+          patternResult.score * 0.3 +
+          aiResult.confidence * 0.3,
       ),
     );
 
@@ -182,8 +202,7 @@ export class ScamDetectorService {
     const riskLevel = this.scoreToRiskLevel(combinedScore);
 
     const recommendation =
-      aiResult.recommendation ||
-      this.getDefaultRecommendation(riskLevel);
+      aiResult.recommendation || this.getDefaultRecommendation(riskLevel);
 
     return {
       scamScore: combinedScore,
@@ -218,9 +237,7 @@ export class ScamDetectorService {
   /**
    * Vector similarity search against known scam patterns
    */
-  private async matchScamPatterns(
-    job: JobContent,
-  ): Promise<{
+  private async matchScamPatterns(job: JobContent): Promise<{
     score: number;
     reasons: string[];
     matchedNames: string[];
@@ -268,8 +285,7 @@ export class ScamDetectorService {
 
       for (const pattern of matched) {
         const patternScore =
-          (severityScore[pattern.severity] || 20) *
-          pattern.similarity;
+          (severityScore[pattern.severity] || 20) * pattern.similarity;
         maxScore = Math.max(maxScore, patternScore);
         reasons.push(
           `Tương tự mẫu lừa đảo "${pattern.name}" (${Math.round(pattern.similarity * 100)}% giống)`,
@@ -291,9 +307,7 @@ export class ScamDetectorService {
   /**
    * AI-powered analysis via Gemini
    */
-  private async runAiAnalysis(
-    job: JobContent,
-  ): Promise<{
+  private async runAiAnalysis(job: JobContent): Promise<{
     confidence: number;
     reasons: string[];
     recommendation: string;
@@ -303,7 +317,8 @@ export class ScamDetectorService {
 Tiêu đề: ${job.title}
 Mô tả: ${job.description}
 Công ty: ${job.companyName || 'Không rõ'}
-Mức lương: ${job.salaryText || (job.salary ? `${job.salary.toLocaleString()}₫` : 'Không rõ')}
+Mức lương: ${job.salaryText || (job.salary ? `${job.salary.toLocaleString()}đ` : 'Không rõ')}
+Hình thức thanh toán: ${job.paymentMethod || 'Không rõ'}
 Địa chỉ: ${job.address || 'Không rõ'}`.trim();
 
       const response = await this.geminiService.generateContent(
@@ -339,9 +354,7 @@ Mức lương: ${job.salaryText || (job.salary ? `${job.salary.toLocaleString()}
     return 'critical';
   }
 
-  private getDefaultRecommendation(
-    riskLevel: string,
-  ): string {
+  private getDefaultRecommendation(riskLevel: string): string {
     const recs: Record<string, string> = {
       safe: 'Tin tuyển dụng này có vẻ an toàn. Hãy ứng tuyển với sự tự tin!',
       low: 'Tin tuyển dụng có một số điểm cần lưu ý. Hãy tìm hiểu kỹ trước khi ứng tuyển.',

@@ -11,13 +11,23 @@ import {
   InternalServerErrorException,
   UseGuards,
   Res,
+  Inject,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { AiChatbotService } from './ai-chatbot.service';
 import { AiMatchingService } from './ai-matching.service';
 import { AiSyncCronService } from './ai-sync-cron.service';
-import { ScamDetectorService, ScamAnalysisResult } from './scam-detector.service';
-import { AiChatDto, AnalyzeJobDto, AnalyzeJobContentDto, BatchSyncDto, UpsertFaqDto } from './dto';
+import {
+  ScamDetectorService,
+  ScamAnalysisResult,
+} from './scam-detector.service';
+import {
+  AiChatDto,
+  AnalyzeJobDto,
+  AnalyzeJobContentDto,
+  BatchSyncDto,
+  UpsertFaqDto,
+} from './dto';
 import { ALL_SYNC_TARGETS } from './ai-embedding.constants';
 import { GraphRagService } from './graph-rag.service';
 import { JwtAuthGuard } from '../../common/guards';
@@ -33,7 +43,9 @@ import { Repository } from 'typeorm';
 import { SavedJob } from './entities';
 import { Job } from '../job/entities';
 import { NotFoundException, JOB_ERRORS } from '../../common';
-import { Role } from '../../common/enums';
+import { JobSalaryType, Role } from '../../common/enums';
+import { REDIS_CLIENT } from '../redis/redis.module';
+import Redis from 'ioredis';
 
 @Controller('ai')
 export class AiController {
@@ -47,7 +59,9 @@ export class AiController {
     private readonly savedJobRepo: Repository<SavedJob>,
     @InjectRepository(Job)
     private readonly jobRepo: Repository<Job>,
-  ) { }
+    @Inject(REDIS_CLIENT)
+    private readonly redisClient: Redis,
+  ) {}
 
   // ==================== AI CHATBOT ====================
 
@@ -69,15 +83,20 @@ export class AiController {
     res.setHeader('Connection', 'keep-alive');
 
     try {
-      const stream = this.chatbotService.chatStream(user.id, dto.message, dto.sessionId);
+      const stream = this.chatbotService.chatStream(
+        user.id,
+        dto.message,
+        dto.sessionId,
+      );
       for await (const chunk of stream) {
         // Send each chunk as an SSE data payload
         res.write(`data: ${JSON.stringify(chunk)}\n\n`);
       }
       res.write('data: [DONE]\n\n');
       res.end();
-    } catch (err) {
-      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
       res.end();
     }
   }
@@ -125,7 +144,10 @@ export class AiController {
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @Query('limit') limit?: number,
   ) {
-    return this.aiMatchingService.matchCandidatesForJob(jobId, limit ? Number(limit) : 10);
+    return this.aiMatchingService.matchCandidatesForJob(
+      jobId,
+      limit ? Number(limit) : 10,
+    );
   }
 
   // ==================== MANUAL SYNC ====================
@@ -153,7 +175,11 @@ export class AiController {
   @Post('dev-sync')
   async triggerDevSync() {
     await this.aiSyncCronService.enqueueBatchSync();
-    return { success: true, message: 'Đã đưa yêu cầu đồng bộ toàn bộ vào hàng đợi. Kiểm tra logs để theo dõi.' };
+    return {
+      success: true,
+      message:
+        'Đã đưa yêu cầu đồng bộ toàn bộ vào hàng đợi. Kiểm tra logs để theo dõi.',
+    };
   }
 
   @Post('sync-jobs')
@@ -192,6 +218,29 @@ export class AiController {
 
   // ==================== SCAM DETECTION ====================
 
+  @Get('analyze-job/:jobId')
+  async getAnalyzeJob(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+  ): Promise<ScamAnalysisResult | null> {
+    const cacheKey = `job:scam-analysis:${jobId}`;
+    const cached = await this.redisClient.get(cacheKey);
+
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (err) {
+        // ignore JSON parse error
+      }
+    }
+
+    // Cache miss: If job is old, we can either analyze synchronously or just return null
+    // Theo yêu cầu mới nhất: "không hiển thị gì cả vì đa số job cũ đã đóng rồi"
+    // => return null directly
+    return null;
+  }
+
+  // Giữ lại hoặc thay thế endpoint POST cũ (tùy ý).
+  // Đã sửa POST để sử dụng cho việc test hoặc analyze thủ công nếu cần.
   @Post('analyze-job')
   async analyzeJobById(
     @Body() dto: AnalyzeJobDto,
@@ -203,7 +252,19 @@ export class AiController {
     if (!job) {
       throw new NotFoundException(JOB_ERRORS.JOB_NOT_FOUND);
     }
-    return this.scamDetectorService.analyzeJob({
+    
+    // Check cache first for manual triggers too
+    const cacheKey = `job:scam-analysis:${dto.jobId}`;
+    const cached = await this.redisClient.get(cacheKey);
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch {
+        // Ignore invalid cached JSON and re-run analysis.
+      }
+    }
+
+    const result = await this.scamDetectorService.analyzeJob({
       title: job.title,
       description: job.description,
       companyName: job.employer?.firstName
@@ -211,10 +272,20 @@ export class AiController {
         : undefined,
       address: job.address,
       salary: Number(job.salaryPerHour || job.totalBudget || 0),
-      salaryText: job.salaryType === 'HOURLY' 
-        ? `${Number(job.salaryPerHour).toLocaleString()}₫/giờ` 
-        : `${Number(job.totalBudget).toLocaleString()}₫ (Khoán)`,
+      salaryText:
+        job.salaryType === JobSalaryType.HOURLY
+          ? `${Number(job.salaryPerHour).toLocaleString()}₫/giờ`
+          : `${Number(job.totalBudget).toLocaleString()}₫ (Khoán)`,
     });
+
+    // Cache the result in Redis with 30 days TTL
+    await this.redisClient.setex(
+      cacheKey,
+      2592000,
+      JSON.stringify(result),
+    );
+
+    return result;
   }
 
   @Post('analyze-job-content')
@@ -266,7 +337,13 @@ export class AiController {
   ) {
     const [data, total] = await this.savedJobRepo.findAndCount({
       where: { userId: user.id },
-      relations: ['job', 'job.employer', 'job.category', 'job.jobSkills', 'job.jobSkills.skill'],
+      relations: [
+        'job',
+        'job.employer',
+        'job.category',
+        'job.jobSkills',
+        'job.jobSkills.skill',
+      ],
       order: { createdAt: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,

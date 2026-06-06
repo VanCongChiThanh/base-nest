@@ -31,6 +31,7 @@ const TYPE_TO_REF: Partial<Record<NotificationType, ReferenceType>> = {
   [NotificationType.PAYMENT_CONFIRMED]: ReferenceType.PAYMENT,
   [NotificationType.PAYMENT_DISPUTED]: ReferenceType.DISPUTE,
   [NotificationType.DISPUTE_RESOLVED]: ReferenceType.DISPUTE,
+  [NotificationType.MILESTONE_NOT_RECEIVED]: ReferenceType.PAYMENT,
 };
 
 /**

@@ -16,7 +16,7 @@ import {
   UpdateWorkerPrivacyDto,
   UpdateEmployerPrivacyDto,
 } from './dto';
-import { CurrentUser } from '../../common/decorators';
+import { CurrentUser, Public } from '../../common/decorators';
 import { User } from '../user/entities';
 import { Role } from '../../common/enums';
 
@@ -67,13 +67,15 @@ export class ProfileController {
     @CurrentUser() user: User,
     @Body() dto: CreateEmployerProfileDto,
   ) {
-    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const targetUserId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.profileService.createEmployerProfile(targetUserId, dto);
   }
 
   @Get('employer/me')
   async getMyEmployerProfile(@CurrentUser() user: User) {
-    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const targetUserId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.profileService.getEmployerProfile(targetUserId);
   }
 
@@ -82,7 +84,8 @@ export class ProfileController {
     @CurrentUser() user: User,
     @Body() dto: UpdateEmployerProfileDto,
   ) {
-    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const targetUserId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.profileService.updateEmployerProfile(targetUserId, dto);
   }
 
@@ -91,12 +94,14 @@ export class ProfileController {
     @CurrentUser() user: User,
     @Body() dto: UpdateEmployerPrivacyDto,
   ) {
-    const targetUserId = user.role === Role.RECRUITER ? user.organizationId : user.id;
+    const targetUserId =
+      user.role === Role.RECRUITER ? user.organizationId : user.id;
     return this.profileService.updateEmployerPrivacySettings(targetUserId, dto);
   }
 
-  @Get('employer/:id')
-  async getEmployerProfile(@Param('id', ParseUUIDPipe) id: string) {
-    return this.profileService.getEmployerProfileById(id);
+  @Public()
+  @Get('employer/:userId')
+  async getEmployerProfile(@Param('userId', ParseUUIDPipe) userId: string) {
+    return this.profileService.getEmployerProfileByUserId(userId);
   }
 }

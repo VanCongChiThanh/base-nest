@@ -334,6 +334,22 @@ export const JOB_ERRORS = {
     code: 'JOB_CHECK_IN_ONLY_GIG',
     message: 'Check-in only applies to GIG jobs',
   },
+  JOB_REQUIRE_EKYC: {
+    code: 'JOB_REQUIRE_EKYC',
+    message: 'Bạn cần hoàn tất xác thực eKYC để có thể đăng tin tuyển dụng.',
+  },
+  JOB_NEGOTIATE_DIRECT_HIRE_ONLY: {
+    code: 'JOB_NEGOTIATE_DIRECT_HIRE_ONLY',
+    message: 'Chỉ có thể thương lượng giá cho yêu cầu Thuê ngay (Direct Hire)',
+  },
+  JOB_NEGOTIATE_ACCESS_FORBIDDEN: {
+    code: 'JOB_NEGOTIATE_ACCESS_FORBIDDEN',
+    message: 'Bạn không có quyền thương lượng giá cho yêu cầu này',
+  },
+  JOB_NEGOTIATE_ALREADY_ACCEPTED: {
+    code: 'JOB_NEGOTIATE_ALREADY_ACCEPTED',
+    message: 'Hợp đồng đã được chấp nhận, không thể đổi giá',
+  },
 } as const;
 
 // ==================== JOB APPLICATION ====================
@@ -403,6 +419,10 @@ export const APPLICATION_ERRORS = {
   ASSIGNMENT_CONFIRM_RECEIPT_WORKER_ONLY: {
     code: 'ASSIGNMENT_CONFIRM_RECEIPT_WORKER_ONLY',
     message: 'Only the worker can confirm payment receipt',
+  },
+  APPLICATION_NEGOTIATE_NOT_FOUND: {
+    code: 'APPLICATION_NEGOTIATE_NOT_FOUND',
+    message: 'Không tìm thấy đơn ứng tuyển của yêu cầu này',
   },
 } as const;
 
@@ -590,7 +610,8 @@ export const SUBSCRIPTION_ERRORS = {
   },
   PAYMENT_CONFIG_ERROR: {
     code: 'PAYMENT_CONFIG_ERROR',
-    message: 'PayOS credentials are not configured. Set PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY.',
+    message:
+      'PayOS credentials are not configured. Set PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY.',
   },
   WEBHOOK_INVALID: {
     code: 'SUBSCRIPTION_WEBHOOK_INVALID',
@@ -614,7 +635,8 @@ export const ESCROW_ERRORS = {
   },
   ESCROW_NOT_FUNDED: {
     code: 'ESCROW_NOT_FUNDED',
-    message: 'Employer chưa ký quỹ đủ tiền. Worker cần đợi employer thanh toán.',
+    message:
+      'Employer chưa ký quỹ đủ tiền. Worker cần đợi employer thanh toán.',
   },
   ESCROW_ALREADY_FUNDED: {
     code: 'ESCROW_ALREADY_FUNDED',
@@ -652,6 +674,10 @@ export const MILESTONE_ERRORS = {
     code: 'MILESTONE_ALREADY_RELEASED',
     message: 'Milestone này đã được giải ngân',
   },
+  MILESTONE_RECEIPT_ALREADY_CONFIRMED: {
+    code: 'MILESTONE_RECEIPT_ALREADY_CONFIRMED',
+    message: 'Bạn đã xác nhận nhận tiền trước đó.',
+  },
   MILESTONE_LIMIT_EXCEEDED: {
     code: 'MILESTONE_LIMIT_EXCEEDED',
     message: 'Vui lòng nhập ít nhất 1 milestone',
@@ -678,7 +704,8 @@ export const WORKER_SERVICE_ERRORS = {
   },
   WORKER_SERVICE_LIMIT_REACHED: {
     code: 'WORKER_SERVICE_LIMIT_REACHED',
-    message: 'Your current plan allows only a limited number of active service profiles',
+    message:
+      'Your current plan allows only a limited number of active service profiles',
   },
 } as const;
 
@@ -713,7 +740,7 @@ export const ERROR_CODES = {
 export type ErrorCode = keyof typeof ERROR_CODES;
 
 // Helper type for error definition strictly verified against defined error codes
-export type ErrorDefinition = typeof ERROR_CODES[keyof typeof ERROR_CODES];
+export type ErrorDefinition = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
 
 /**
  * Get error definition by error code

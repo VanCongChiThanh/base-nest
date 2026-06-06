@@ -1,4 +1,10 @@
-import { Injectable, Logger, InternalServerErrorException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  InternalServerErrorException,
+  BadRequestException,
+  Inject,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bull';
 import Bull from 'bull';
@@ -8,6 +14,8 @@ import {
   SyncTarget,
   ALL_SYNC_TARGETS,
 } from './ai-embedding.constants';
+import { REDIS_CLIENT } from '../redis/redis.module';
+import Redis from 'ioredis';
 
 /**
  * Cron job that dispatches batch-sync to the Bull queue.
@@ -21,6 +29,8 @@ export class AiSyncCronService {
   constructor(
     @InjectQueue(AI_EMBEDDING_QUEUE)
     private readonly embeddingQueue: Bull.Queue,
+    @Inject(REDIS_CLIENT)
+    private readonly redisClient: Redis,
   ) {}
 
   // ─── Cron: dispatch batch sync every hour ──────────────────────
@@ -48,6 +58,31 @@ export class AiSyncCronService {
       },
     );
     this.logger.debug(`Enqueued SYNC_JOB for ${jobId}`);
+  }
+
+  /** Enqueue scam analysis for a single job */
+  async enqueueScamAnalysis(jobId: string) {
+    await this.embeddingQueue.add(
+      EmbeddingJobName.ANALYZE_SCAM_JOB,
+      { jobId },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      },
+    );
+    this.logger.debug(`Enqueued ANALYZE_SCAM_JOB for ${jobId}`);
+  }
+
+  /** Delete scam analysis cache for a single job */
+  async deleteScamAnalysisCache(jobId: string) {
+    try {
+      await this.redisClient.del(`job:scam-analysis:${jobId}`);
+      this.logger.debug(`Deleted scam analysis cache for job ${jobId}`);
+    } catch (err) {
+      this.logger.warn(`Failed to delete scam analysis cache for job ${jobId}`, err);
+    }
   }
 
   /** Enqueue embedding for a single worker service */
@@ -83,7 +118,11 @@ export class AiSyncCronService {
     await this.embeddingQueue.add(
       EmbeddingJobName.SYNC_GRAPH_JOB,
       { jobId },
-      { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, removeOnComplete: true },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: true,
+      },
     );
     this.logger.debug(`Enqueued SYNC_GRAPH_JOB for ${jobId}`);
   }
@@ -93,7 +132,11 @@ export class AiSyncCronService {
     await this.embeddingQueue.add(
       EmbeddingJobName.SYNC_GRAPH_WORKER,
       { workerServiceId },
-      { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, removeOnComplete: true },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: true,
+      },
     );
     this.logger.debug(`Enqueued SYNC_GRAPH_WORKER for ${workerServiceId}`);
   }
@@ -119,8 +162,12 @@ export class AiSyncCronService {
     );
 
     if (isAlreadyQueued) {
-      this.logger.warn('BATCH_SYNC_ALL is already in queue or processing. Skipping.');
-      throw new BadRequestException('Tiến trình đồng bộ đang chạy. Vui lòng đợi trong giây lát...');
+      this.logger.warn(
+        'BATCH_SYNC_ALL is already in queue or processing. Skipping.',
+      );
+      throw new BadRequestException(
+        'Tiến trình đồng bộ đang chạy. Vui lòng đợi trong giây lát...',
+      );
     }
 
     await this.embeddingQueue.add(
@@ -158,7 +205,9 @@ export class AiSyncCronService {
         j.name === EmbeddingJobName.BATCH_SYNC_SELECTIVE,
     );
     if (isRunning) {
-      throw new BadRequestException('Tiến trình đồng bộ đang chạy. Vui lòng đợi trong giây lát...');
+      throw new BadRequestException(
+        'Tiến trình đồng bộ đang chạy. Vui lòng đợi trong giây lát...',
+      );
     }
 
     await this.embeddingQueue.add(
@@ -167,7 +216,9 @@ export class AiSyncCronService {
       { attempts: 1, removeOnComplete: true, removeOnFail: false },
     );
 
-    this.logger.log(`Enqueued BATCH_SYNC_SELECTIVE — targets: [${unique.join(', ')}]`);
+    this.logger.log(
+      `Enqueued BATCH_SYNC_SELECTIVE — targets: [${unique.join(', ')}]`,
+    );
     return {
       message: `Đã đưa yêu cầu đồng bộ vào hàng đợi.`,
       targets: unique,
@@ -195,7 +246,12 @@ export class AiSyncCronService {
       this.embeddingQueue.getFailed(),
     ]);
 
-    const mapJob = (j: Bull.Job) => ({ id: j.id, name: j.name, data: j.data, status: j.finishedOn ? 'completed' : 'unknown' });
+    const mapJob = (j: Bull.Job) => ({
+      id: j.id,
+      name: j.name,
+      data: j.data,
+      status: j.finishedOn ? 'completed' : 'unknown',
+    });
 
     return {
       waiting: waiting.map(mapJob),

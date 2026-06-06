@@ -6,10 +6,7 @@ import { User, BankAccount } from './entities';
 import { ProfileModule } from '../profile/profile.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([User, BankAccount]),
-    ProfileModule
-  ],
+  imports: [TypeOrmModule.forFeature([User, BankAccount]), ProfileModule],
   controllers: [UserController],
   providers: [UserService],
   exports: [UserService],

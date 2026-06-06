@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JobCategory } from './entities';
-import { CreateJobCategoryDto, UpdateJobCategoryDto } from './dto';import {
+import { CreateJobCategoryDto, UpdateJobCategoryDto } from './dto';
+import {
   CATEGORY_ERRORS,
   NotFoundException,
   ConflictException,

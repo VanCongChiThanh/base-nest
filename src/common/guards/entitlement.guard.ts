@@ -1,8 +1,4 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import {
   CONSUME_QUOTAS_KEY,
@@ -54,7 +50,9 @@ export class EntitlementGuard implements CanActivate {
 
         if (requirement.equals !== undefined) {
           if (value !== requirement.equals) {
-            throw new ForbiddenException(SUBSCRIPTION_ERRORS.FEATURE_NOT_AVAILABLE);
+            throw new ForbiddenException(
+              SUBSCRIPTION_ERRORS.FEATURE_NOT_AVAILABLE,
+            );
           }
           continue;
         }
@@ -64,7 +62,6 @@ export class EntitlementGuard implements CanActivate {
         }
       }
     }
-
 
     for (const quota of consumeQuotas) {
       await this.subscriptionService.consumeQuota(user, quota);

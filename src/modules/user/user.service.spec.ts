@@ -49,7 +49,13 @@ describe('UserService', () => {
         UserService,
         { provide: getRepositoryToken(User), useValue: mockRepo },
         { provide: getRepositoryToken(BankAccount), useValue: mockRepo },
-        { provide: ProfileService, useValue: { createEmployerProfile: jest.fn(), createWorkerProfile: jest.fn() } },
+        {
+          provide: ProfileService,
+          useValue: {
+            createEmployerProfile: jest.fn(),
+            createWorkerProfile: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

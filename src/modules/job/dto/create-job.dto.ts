@@ -69,7 +69,10 @@ export class CreateJobDto {
   startTime?: string;
 
   @IsOptional()
-  @ValidateIf((o) => o.jobType !== JobType.ONLINE && o.endTime != null && o.endTime !== '')
+  @ValidateIf(
+    (o) =>
+      o.jobType !== JobType.ONLINE && o.endTime != null && o.endTime !== '',
+  )
   @IsDateString()
   endTime?: string;
 
@@ -151,7 +154,10 @@ export class CreateJobDto {
 
   /** Deadline hoàn thành dự án (ONLINE) */
   @IsOptional()
-  @ValidateIf((o) => o.jobType === JobType.ONLINE && o.deadline != null && o.deadline !== '')
+  @ValidateIf(
+    (o) =>
+      o.jobType === JobType.ONLINE && o.deadline != null && o.deadline !== '',
+  )
   @IsDateString()
   deadline?: string;
 

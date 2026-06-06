@@ -1,14 +1,18 @@
 import { Process, Processor } from '@nestjs/bull';
-import { Logger } from '@nestjs/common';
+import { Logger, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import Bull from 'bull';
 import { Job } from '../job/entities';
 import { WorkerServiceEntity } from '../worker-service/entities';
+import { EmployerProfile } from '../profile/entities';
 import { GeminiService } from './gemini.service';
 import { GraphRagService } from './graph-rag.service';
+import { ScamDetectorService } from './scam-detector.service';
 import { NotificationHelper } from '../notification/notification.helper';
-import { JobStatus, NotificationType } from '../../common/enums';
+import { JobStatus, NotificationType, JobSalaryType } from '../../common/enums';
+import { REDIS_CLIENT } from '../redis/redis.module';
+import Redis from 'ioredis';
 import {
   AI_EMBEDDING_QUEUE,
   EmbeddingJobName,
@@ -19,6 +23,7 @@ import {
   SyncGraphWorkerPayload,
   RemoveGraphNodePayload,
   BatchSyncSelectivePayload,
+  AnalyzeScamJobPayload,
 } from './ai-embedding.constants';
 
 @Processor(AI_EMBEDDING_QUEUE)
@@ -34,6 +39,11 @@ export class AiEmbeddingProcessor {
     private readonly graphRagService: GraphRagService,
     private readonly dataSource: DataSource,
     private readonly notificationHelper: NotificationHelper,
+    private readonly scamDetectorService: ScamDetectorService,
+    @Inject(REDIS_CLIENT)
+    private readonly redisClient: Redis,
+    @InjectRepository(EmployerProfile)
+    private readonly employerProfileRepo: Repository<EmployerProfile>,
   ) {}
 
   // ─── Single Job (legacy → delegates to graph) ──────────────────
@@ -47,12 +57,80 @@ export class AiEmbeddingProcessor {
     await this.graphRagService.syncJobNode(jobId);
   }
 
+  // ─── Scam Analysis ───────────────────────────────────────────────
+
+  @Process(EmbeddingJobName.ANALYZE_SCAM_JOB)
+  async handleAnalyzeScamJob(bullJob: Bull.Job<AnalyzeScamJobPayload>) {
+    const { jobId } = bullJob.data;
+    this.logger.debug(`[Queue] ANALYZE_SCAM_JOB for job ${jobId}`);
+
+    try {
+      const job = await this.jobRepository.findOne({
+        where: { id: jobId },
+        relations: ['employer'],
+      });
+
+      if (!job) {
+        this.logger.warn(`[Queue] Job ${jobId} not found for scam analysis`);
+        return;
+      }
+
+      let companyName = job.employer?.firstName
+        ? `${job.employer.firstName} ${job.employer.lastName}`
+        : undefined;
+      try {
+        const empProfile = await this.employerProfileRepo.findOne({
+          where: { userId: job.employerId },
+          select: ['companyName'],
+        });
+        if (empProfile?.companyName) {
+          companyName = empProfile.companyName;
+        }
+      } catch (e) {
+        this.logger.warn(
+          'Failed to fetch employer profile for scam analysis',
+          e,
+        );
+      }
+
+      const analysisResult = await this.scamDetectorService.analyzeJob({
+        title: job.title,
+        description: job.description,
+        companyName: companyName,
+        address: job.address,
+        paymentMethod: job.paymentMethod,
+        salary: Number(job.salaryPerHour || job.totalBudget || 0),
+        salaryText:
+          job.salaryType === JobSalaryType.HOURLY
+            ? `${Number(job.salaryPerHour).toLocaleString()}₫/giờ`
+            : `${Number(job.totalBudget).toLocaleString()}₫ (Khoán)`,
+      });
+
+      // Cache the result in Redis with 30 days TTL (2592000 seconds)
+      await this.redisClient.setex(
+        `job:scam-analysis:${jobId}`,
+        2592000,
+        JSON.stringify(analysisResult),
+      );
+
+      this.logger.debug(`[Queue] ✅ Scam analysis cached for job ${jobId}`);
+    } catch (error: any) {
+      this.logger.error(
+        `[Queue] Scam analysis failed for job ${jobId}`,
+        error?.stack,
+      );
+      throw error;
+    }
+  }
+
   // ─── Single Worker Service (legacy → delegates to graph) ────────
 
   @Process(EmbeddingJobName.SYNC_WORKER_SERVICE)
   async handleSyncWorkerService(bullJob: Bull.Job<SyncWorkerServicePayload>) {
     const { workerServiceId } = bullJob.data;
-    this.logger.debug(`[Queue] SYNC_WORKER_SERVICE ${workerServiceId} → delegated to graph sync`);
+    this.logger.debug(
+      `[Queue] SYNC_WORKER_SERVICE ${workerServiceId} → delegated to graph sync`,
+    );
     await this.graphRagService.syncWorkerServiceNode(workerServiceId);
   }
 
@@ -66,7 +144,10 @@ export class AiEmbeddingProcessor {
       await this.graphRagService.deactivateNode(`job_${jobId}`);
       this.logger.log(`[Queue] ✅ Graph node deactivated: job_${jobId}`);
     } catch (error: any) {
-      this.logger.error(`[Queue] Lỗi khi deactivate graph node job ${jobId}`, error?.stack);
+      this.logger.error(
+        `[Queue] Lỗi khi deactivate graph node job ${jobId}`,
+        error?.stack,
+      );
     }
   }
 
@@ -108,11 +189,15 @@ export class AiEmbeddingProcessor {
 
       for (const svc of services) {
         try {
-          const synced = await this.graphRagService.syncWorkerServiceNode(svc.id);
+          const synced = await this.graphRagService.syncWorkerServiceNode(
+            svc.id,
+          );
           if (synced) servicesSynced++;
           await this.delay(300);
         } catch (err: any) {
-          this.logger.warn(`[Batch] Skip worker-service ${svc.id}: ${err?.message}`);
+          this.logger.warn(
+            `[Batch] Skip worker-service ${svc.id}: ${err?.message}`,
+          );
         }
       }
     } catch (error: any) {
@@ -125,7 +210,10 @@ export class AiEmbeddingProcessor {
 
     // Thông báo admin
     try {
-      const admins = await this.dataSource.query('SELECT id FROM users WHERE role = $1', ['ADMIN']);
+      const admins = await this.dataSource.query(
+        'SELECT id FROM users WHERE role = $1',
+        ['ADMIN'],
+      );
       if (admins?.length > 0) {
         await this.notificationHelper.sendToMany(
           admins.map((a: any) => a.id),
@@ -145,7 +233,6 @@ export class AiEmbeddingProcessor {
     return { jobsSynced, servicesSynced };
   }
 
-
   // ─── Graph RAG Processors ──────────────────────────────────────
 
   @Process(EmbeddingJobName.SYNC_GRAPH_JOB)
@@ -156,7 +243,10 @@ export class AiEmbeddingProcessor {
       await this.graphRagService.syncJobNode(jobId);
       this.logger.log(`[GraphRAG] ✅ Graph node synced: job ${jobId}`);
     } catch (err: any) {
-      this.logger.error(`[GraphRAG] Error syncing graph job ${jobId}`, err?.stack);
+      this.logger.error(
+        `[GraphRAG] Error syncing graph job ${jobId}`,
+        err?.stack,
+      );
       throw err;
     }
   }
@@ -164,12 +254,19 @@ export class AiEmbeddingProcessor {
   @Process(EmbeddingJobName.SYNC_GRAPH_WORKER)
   async handleSyncGraphWorker(bullJob: Bull.Job<SyncGraphWorkerPayload>) {
     const { workerServiceId } = bullJob.data;
-    this.logger.log(`[GraphRAG] Sync graph node for worker-service ${workerServiceId}`);
+    this.logger.log(
+      `[GraphRAG] Sync graph node for worker-service ${workerServiceId}`,
+    );
     try {
       await this.graphRagService.syncWorkerServiceNode(workerServiceId);
-      this.logger.log(`[GraphRAG] ✅ Graph node synced: worker-service ${workerServiceId}`);
+      this.logger.log(
+        `[GraphRAG] ✅ Graph node synced: worker-service ${workerServiceId}`,
+      );
     } catch (err: any) {
-      this.logger.error(`[GraphRAG] Error syncing graph worker ${workerServiceId}`, err?.stack);
+      this.logger.error(
+        `[GraphRAG] Error syncing graph worker ${workerServiceId}`,
+        err?.stack,
+      );
       throw err;
     }
   }
@@ -179,7 +276,9 @@ export class AiEmbeddingProcessor {
   @Process(EmbeddingJobName.BATCH_SYNC_SELECTIVE)
   async handleBatchSyncSelective(bullJob: Bull.Job<BatchSyncSelectivePayload>) {
     const { targets } = bullJob.data;
-    this.logger.log(`[Queue] Selective sync started — targets: [${targets.join(', ')}]`);
+    this.logger.log(
+      `[Queue] Selective sync started — targets: [${targets.join(', ')}]`,
+    );
 
     const result: Record<string, number> = {};
 
@@ -215,11 +314,15 @@ export class AiEmbeddingProcessor {
         });
         for (const svc of services) {
           try {
-            const synced = await this.graphRagService.syncWorkerServiceNode(svc.id);
+            const synced = await this.graphRagService.syncWorkerServiceNode(
+              svc.id,
+            );
             if (synced) count++;
             await this.delay(300);
           } catch (err: any) {
-            this.logger.warn(`[Selective] Skip worker-service ${svc.id}: ${err?.message}`);
+            this.logger.warn(
+              `[Selective] Skip worker-service ${svc.id}: ${err?.message}`,
+            );
           }
         }
       } catch (err: any) {
@@ -240,7 +343,9 @@ export class AiEmbeddingProcessor {
       }
     }
 
-    this.logger.log(`[Queue] ✅ Selective sync done: ${JSON.stringify(result)}`);
+    this.logger.log(
+      `[Queue] ✅ Selective sync done: ${JSON.stringify(result)}`,
+    );
 
     // Thông báo admin (cùng cơ chế với BATCH_SYNC_ALL)
     const parts: string[] = [];
@@ -259,9 +364,10 @@ export class AiEmbeddingProcessor {
         : 'Đồng bộ AI (theo lựa chọn) đã hoàn tất.';
 
     try {
-      const admins = await this.dataSource.query('SELECT id FROM users WHERE role = $1', [
-        'ADMIN',
-      ]);
+      const admins = await this.dataSource.query(
+        'SELECT id FROM users WHERE role = $1',
+        ['ADMIN'],
+      );
       if (admins?.length > 0) {
         await this.notificationHelper.sendToMany(
           admins.map((a: { id: string }) => a.id),
@@ -275,7 +381,10 @@ export class AiEmbeddingProcessor {
         );
       }
     } catch (notifyErr: unknown) {
-      this.logger.error('Lỗi gửi thông báo selective sync', (notifyErr as Error)?.stack);
+      this.logger.error(
+        'Lỗi gửi thông báo selective sync',
+        (notifyErr as Error)?.stack,
+      );
     }
 
     return result;
@@ -289,7 +398,10 @@ export class AiEmbeddingProcessor {
       await this.graphRagService.deactivateNode(sourceId);
       this.logger.log(`[GraphRAG] ✅ Graph node deactivated: ${sourceId}`);
     } catch (err: any) {
-      this.logger.error(`[GraphRAG] Error deactivating graph node ${sourceId}`, err?.stack);
+      this.logger.error(
+        `[GraphRAG] Error deactivating graph node ${sourceId}`,
+        err?.stack,
+      );
     }
   }
 

@@ -1,4 +1,13 @@
-import { IsString, IsNotEmpty, IsArray, IsDateString, IsOptional, IsEnum, IsNumber, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsArray,
+  IsDateString,
+  IsOptional,
+  IsEnum,
+  IsNumber,
+  IsBoolean,
+} from 'class-validator';
 import { ServiceType } from '../entities/worker-service.entity';
 
 export class CreateWorkerServiceDto {

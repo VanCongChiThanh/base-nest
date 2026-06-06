@@ -1,6 +1,6 @@
 import { IsOptional, IsNumber, IsString, IsEnum } from 'class-validator';
 import { Type } from 'class-transformer';
-import { JobType } from '../../../common/enums';
+import { JobType, JobStatus } from '../../../common/enums';
 
 export class JobFilterDto {
   @IsOptional()
@@ -63,4 +63,11 @@ export class JobFilterDto {
   @Type(() => Number)
   radius?: number;
 
+  @IsOptional()
+  @IsString()
+  employerId?: string;
+
+  @IsOptional()
+  @IsEnum(JobStatus)
+  status?: JobStatus;
 }

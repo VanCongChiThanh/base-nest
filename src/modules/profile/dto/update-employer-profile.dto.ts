@@ -12,6 +12,14 @@ export class UpdateEmployerProfileDto {
 
   @IsOptional()
   @IsString()
+  bannerUrl?: string;
+
+  @IsOptional()
+  @IsString({ each: true })
+  galleryUrls?: string[];
+
+  @IsOptional()
+  @IsString()
   phone?: string;
 
   @IsOptional()

@@ -32,6 +32,12 @@ export class EmployerProfile {
   @Column({ name: 'company_description', type: 'text', nullable: true })
   companyDescription: string;
 
+  @Column({ name: 'banner_url', nullable: true })
+  bannerUrl: string;
+
+  @Column({ name: 'gallery_urls', type: 'jsonb', nullable: true })
+  galleryUrls: string[];
+
   @Column({ nullable: true })
   phone: string;
 

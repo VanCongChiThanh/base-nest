@@ -146,14 +146,16 @@ export class UserController {
   @UseGuards(RolesGuard)
   @Roles(Role.ORGANIZATION)
   async getRecruiters(@CurrentUser() user: User) {
-    return this.userService.findAll({
-      page: 1,
-      limit: 100, // Or implement pagination properly if needed
-      role: Role.RECRUITER,
-    }).then((res) => ({
-      ...res,
-      data: res.data.filter((u) => u.organizationId === user.id),
-    }));
+    return this.userService
+      .findAll({
+        page: 1,
+        limit: 100, // Or implement pagination properly if needed
+        role: Role.RECRUITER,
+      })
+      .then((res) => ({
+        ...res,
+        data: res.data.filter((u) => u.organizationId === user.id),
+      }));
   }
 
   // ==================== ADMIN QUERIES ====================

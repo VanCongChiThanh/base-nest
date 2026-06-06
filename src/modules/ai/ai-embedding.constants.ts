@@ -20,6 +20,8 @@ export enum EmbeddingJobName {
   SYNC_GRAPH_WORKER = 'sync-graph-worker',
   /** Deactivate a graph_knowledge node */
   REMOVE_GRAPH_NODE = 'remove-graph-node',
+  /** Analyze job for scam */
+  ANALYZE_SCAM_JOB = 'analyze-scam-job',
 }
 
 /**
@@ -58,4 +60,8 @@ export interface RemoveGraphNodePayload {
 
 export interface BatchSyncSelectivePayload {
   targets: SyncTarget[];
+}
+
+export interface AnalyzeScamJobPayload {
+  jobId: string;
 }

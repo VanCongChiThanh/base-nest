@@ -54,7 +54,13 @@ export class JobAssignment {
   @Column({ name: 'completed_at', type: 'timestamptz', nullable: true })
   completedAt: Date;
 
-  @Column({ name: 'logged_hours', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({
+    name: 'logged_hours',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+  })
   loggedHours: number;
 
   @Column({ name: 'hours_submitted_by', nullable: true })

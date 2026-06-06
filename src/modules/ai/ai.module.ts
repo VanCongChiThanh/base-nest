@@ -11,14 +11,10 @@ import { AiController } from './ai.controller';
 import { AiDbInitService } from './ai-db-init.service';
 import { GraphRagService } from './graph-rag.service';
 import { AiMatchingService } from './ai-matching.service';
-import {
-  ScamPattern,
-  ChatSession,
-  SavedJob,
-  GraphKnowledge,
-} from './entities';
+import { ScamPattern, ChatSession, SavedJob, GraphKnowledge } from './entities';
 import { Job } from '../job/entities';
 import { WorkerServiceEntity } from '../worker-service/entities';
+import { EmployerProfile } from '../profile/entities';
 import { AI_EMBEDDING_QUEUE } from './ai-embedding.constants';
 import { NotificationModule } from '../notification/notification.module';
 
@@ -31,6 +27,7 @@ import { NotificationModule } from '../notification/notification.module';
       GraphKnowledge,
       Job,
       WorkerServiceEntity,
+      EmployerProfile,
     ]),
     BullModule.registerQueue({
       name: AI_EMBEDDING_QUEUE,
@@ -49,7 +46,11 @@ import { NotificationModule } from '../notification/notification.module';
     AiEmbeddingProcessor,
     AiDbInitService,
   ],
-  exports: [GeminiService, ScamDetectorService, AiSyncCronService, GraphRagService],
+  exports: [
+    GeminiService,
+    ScamDetectorService,
+    AiSyncCronService,
+    GraphRagService,
+  ],
 })
 export class AiModule {}
-

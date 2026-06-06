@@ -16,6 +16,7 @@ import {
 } from './entities';
 import { NotificationModule } from '../notification';
 import { EmployerProfile, WorkerProfile } from '../profile/entities';
+import { Escrow } from '../payment/entities';
 import { UserModule } from '../user/user.module';
 import { AiModule } from '../ai';
 import jwtConfig from '../../config/jwt.config';
@@ -37,6 +38,7 @@ import jwtConfig from '../../config/jwt.config';
       JobInvitation,
       EmployerProfile,
       WorkerProfile,
+      Escrow,
     ]),
     NotificationModule,
     UserModule,

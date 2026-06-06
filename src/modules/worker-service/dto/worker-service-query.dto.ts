@@ -1,4 +1,10 @@
-import { IsOptional, IsString, IsNumber, IsBoolean, IsEnum } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsBoolean,
+  IsEnum,
+} from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ServiceType } from '../entities';
 
@@ -34,7 +40,7 @@ export class WorkerServiceQueryDto {
   type?: ServiceType;
 
   @IsOptional()
-  @Transform(({ value }) => value === 'true')
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   isAvailableNow?: boolean;
 

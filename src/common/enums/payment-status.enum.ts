@@ -15,10 +15,10 @@ export enum PaymentType {
 }
 
 export enum EscrowStatus {
-  PENDING = 'PENDING',           // Chờ employer thanh toán
-  FUNDED = 'FUNDED',             // Đã ký quỹ đủ tiền
+  PENDING = 'PENDING', // Chờ employer thanh toán
+  FUNDED = 'FUNDED', // Đã ký quỹ đủ tiền
   PARTIALLY_RELEASED = 'PARTIALLY_RELEASED', // Đã giải ngân 1 phần
-  FULLY_RELEASED = 'FULLY_RELEASED',         // Đã giải ngân toàn bộ
-  REFUNDED = 'REFUNDED',         // Hoàn tiền cho employer
-  DISPUTED = 'DISPUTED',         // Đang tranh chấp
+  FULLY_RELEASED = 'FULLY_RELEASED', // Đã giải ngân toàn bộ
+  REFUNDED = 'REFUNDED', // Hoàn tiền cho employer
+  DISPUTED = 'DISPUTED', // Đang tranh chấp
 }
