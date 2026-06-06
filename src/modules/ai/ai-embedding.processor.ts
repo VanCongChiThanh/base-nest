@@ -99,6 +99,7 @@ export class AiEmbeddingProcessor {
         companyName: companyName,
         address: job.address,
         paymentMethod: job.paymentMethod,
+        jobType: job.jobType,
         salary: Number(job.salaryPerHour || job.totalBudget || 0),
         salaryText:
           job.salaryType === JobSalaryType.HOURLY
