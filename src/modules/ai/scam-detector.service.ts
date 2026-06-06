@@ -21,6 +21,7 @@ interface JobContent {
   salaryText?: string;
   address?: string;
   paymentMethod?: string;
+  jobType?: string;
 }
 
 // ─── Rule-based scoring weights ───
@@ -124,6 +125,23 @@ const RULE_CHECKS: Array<{
     score: 15,
     reason: 'Yêu cầu liên hệ qua kênh riêng kết hợp hứa hẹn thu nhập cao',
   },
+  {
+    name: 'garbage_address',
+    check: (job) => {
+      if (!job.address) return false;
+      const text = job.address.toLowerCase().trim();
+      // Bắt các chuỗi ngắn vô nghĩa toàn phụ âm hoặc lặp từ liên tục (như fdsf, asdf)
+      return (text.length > 0 && text.length < 8 && !/[aeiouy]/.test(text)) || /(.)\1{3,}/.test(text);
+    },
+    score: 15,
+    reason: 'Địa chỉ làm việc không hợp lệ (có chứa ký tự rác hoặc vô nghĩa)',
+  },
+  {
+    name: 'online_job_warning',
+    check: (job) => job.jobType === 'ONLINE',
+    score: 10,
+    reason: 'Lưu ý: Việc làm trực tuyến (Online) luôn tiềm ẩn rủi ro lừa đảo công sức. Hãy thỏa thuận sử dụng thanh toán qua nền tảng (Escrow) thay vì thanh toán trực tiếp.',
+  },
 ];
 
 const SCAM_ANALYSIS_PROMPT = `Bạn là chuyên gia phân tích chất lượng tin tuyển dụng tại Việt Nam.
@@ -136,14 +154,15 @@ Hãy phân tích tin tuyển dụng sau và trả về kết quả định dạn
   "recommendation": "lời khuyên cho người tìm việc"
 }
 
-LƯU Ý QUAN TRỌNG:
-- Nền tảng ĐÃ YÊU CẦU XÁC THỰC DANH TÍNH (eKYC) với người đăng bài, nên rủi ro lừa đảo lấy cắp thông tin giả mạo là RẤT THẤP. Tuyệt đối KHÔNG kết luận quá tiêu cực (ví dụ: "tin giả mạo lấy cắp thông tin") trừ khi có bằng chứng cực kỳ rõ ràng như bắt đóng tiền cọc.
-- Thay vào đó, hãy tập trung phân tích CHẤT LƯỢNG tin đăng:
-  + Mô tả công việc có quá ngắn, sơ sài, ký tự rác không?
-  + Tên công ty hoặc địa chỉ có hợp lệ không? (ví dụ các chuỗi như 'fdsf', 'asdf' là ký tự rác).
-  + Mức lương có bất thường (quá cao hoặc quá thấp) so với tính chất công việc không?
-- Đưa ra điểm confidence (độ cảnh báo từ 0-100, điểm càng cao thì tin đăng càng kém chất lượng hoặc rủi ro).
-- Phần recommendation hãy ưu tiên nhắc nhở ứng viên trao đổi kỹ nội dung công việc. Đặc biệt nếu công việc là thanh toán trực tiếp bên ngoài nền tảng, hãy nhắc nhở ứng viên thỏa thuận rõ ràng và cẩn trọng để tránh rủi ro quỵt lương.
+LƯU Ý QUAN TRỌNG VỀ CÁCH CHẤM ĐIỂM (confidence):
+- Điểm confidence thể hiện MỨC ĐỘ CẢNH BÁO (0 = Rất tốt, 100 = Rất rủi ro).
+- Nền tảng ĐÃ YÊU CẦU XÁC THỰC DANH TÍNH (eKYC) với người đăng, nên KHÔNG DÙNG TỪ NGỮ "lừa đảo", "giả mạo" trừ khi có dấu hiệu cực kỳ rõ ràng (bắt đóng cọc, thu phí).
+- TUY NHIÊN, KHÔNG ĐƯỢC CHẤM ĐIỂM QUÁ THẤP (An toàn) nếu tin đăng cẩu thả. Hãy mạnh dạn tăng điểm confidence (30-60) và đánh giá là KHÔNG ĐẠT CHẤT LƯỢNG nếu có các lỗi sau:
+  + Mô tả công việc quá ngắn, sơ sài, chung chung.
+  + Tên công ty hoặc địa chỉ chứa ký tự rác (như 'fdsf', 'asdf').
+  + Mức lương bất thường (quá cao vô lý hoặc quá thấp).
+- Trả về danh sách 'reasons' liệt kê rõ các điểm trừ về chất lượng trên.
+- Phần recommendation: Luôn đưa ra lời khuyên thực tế. Đặc biệt nếu thanh toán trực tiếp, hãy nhắc nhở ứng viên thỏa thuận rõ ràng và cẩn trọng để tránh rủi ro quỵt lương. Nếu tin có ký tự rác, hãy nhắc ứng viên cẩn thận xác minh lại.
 `;
 
 @Injectable()
@@ -313,12 +332,22 @@ export class ScamDetectorService {
     recommendation: string;
   }> {
     try {
+      let jobTypeVn = job.jobType;
+      if (job.jobType === 'GIG') jobTypeVn = 'Thời vụ (Ngắn hạn)';
+      if (job.jobType === 'PART_TIME') jobTypeVn = 'Bán thời gian (Part-time)';
+      if (job.jobType === 'ONLINE') jobTypeVn = 'Làm việc trực tuyến (Online)';
+
+      let paymentMethodVn = job.paymentMethod;
+      if (job.paymentMethod === 'P2P') paymentMethodVn = 'Trực tiếp bên ngoài nền tảng (P2P)';
+      if (job.paymentMethod === 'ESCROW') paymentMethodVn = 'An toàn qua hệ thống nền tảng (Escrow)';
+
       const jobText = `
 Tiêu đề: ${job.title}
 Mô tả: ${job.description}
 Công ty: ${job.companyName || 'Không rõ'}
+Hình thức công việc: ${jobTypeVn || 'Không rõ'}
 Mức lương: ${job.salaryText || (job.salary ? `${job.salary.toLocaleString()}đ` : 'Không rõ')}
-Hình thức thanh toán: ${job.paymentMethod || 'Không rõ'}
+Hình thức thanh toán: ${paymentMethodVn || 'Không rõ'}
 Địa chỉ: ${job.address || 'Không rõ'}`.trim();
 
       const response = await this.geminiService.generateContent(

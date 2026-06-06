@@ -10,7 +10,7 @@ import { GeminiService } from './gemini.service';
 import { GraphRagService } from './graph-rag.service';
 import { ScamDetectorService } from './scam-detector.service';
 import { NotificationHelper } from '../notification/notification.helper';
-import { JobStatus, NotificationType, JobSalaryType } from '../../common/enums';
+import { JobStatus, NotificationType, JobSalaryType, JobType, OnlinePaymentType } from '../../common/enums';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import Redis from 'ioredis';
 import {
@@ -93,17 +93,32 @@ export class AiEmbeddingProcessor {
         );
       }
 
+      let salaryText = '';
+      if (job.jobType === JobType.ONLINE) {
+        if (job.onlinePaymentType === OnlinePaymentType.FIXED_PRICE) {
+          salaryText = `${Number(job.totalBudget).toLocaleString()}₫ (Khoán)`;
+        } else {
+          salaryText = `${Number(job.hourlyRateMin).toLocaleString()}₫ - ${Number(job.hourlyRateMax).toLocaleString()}₫/giờ`;
+        }
+      } else {
+        salaryText = `${Number(job.salaryPerHour).toLocaleString()}₫/${
+          job.salaryType === JobSalaryType.FIXED ? 'công' : 'giờ'
+        }`;
+      }
+
+      const fullAddress = (job.provinceCode && job.wardCode)
+        ? `${job.address} (Tỉnh/Thành phố và Phường/Xã đã được chọn hợp lệ trên hệ thống)`
+        : job.address;
+
       const analysisResult = await this.scamDetectorService.analyzeJob({
         title: job.title,
         description: job.description,
         companyName: companyName,
-        address: job.address,
+        address: fullAddress,
         paymentMethod: job.paymentMethod,
+        jobType: job.jobType,
         salary: Number(job.salaryPerHour || job.totalBudget || 0),
-        salaryText:
-          job.salaryType === JobSalaryType.HOURLY
-            ? `${Number(job.salaryPerHour).toLocaleString()}₫/giờ`
-            : `${Number(job.totalBudget).toLocaleString()}₫ (Khoán)`,
+        salaryText,
       });
 
       // Cache the result in Redis with 30 days TTL (2592000 seconds)
