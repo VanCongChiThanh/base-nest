@@ -332,12 +332,22 @@ export class ScamDetectorService {
     recommendation: string;
   }> {
     try {
+      let jobTypeVn = job.jobType;
+      if (job.jobType === 'GIG') jobTypeVn = 'Thời vụ (Ngắn hạn)';
+      if (job.jobType === 'PART_TIME') jobTypeVn = 'Bán thời gian (Part-time)';
+      if (job.jobType === 'ONLINE') jobTypeVn = 'Làm việc trực tuyến (Online)';
+
+      let paymentMethodVn = job.paymentMethod;
+      if (job.paymentMethod === 'P2P') paymentMethodVn = 'Trực tiếp bên ngoài nền tảng (P2P)';
+      if (job.paymentMethod === 'ESCROW') paymentMethodVn = 'An toàn qua hệ thống nền tảng (Escrow)';
+
       const jobText = `
 Tiêu đề: ${job.title}
 Mô tả: ${job.description}
 Công ty: ${job.companyName || 'Không rõ'}
+Hình thức công việc: ${jobTypeVn || 'Không rõ'}
 Mức lương: ${job.salaryText || (job.salary ? `${job.salary.toLocaleString()}đ` : 'Không rõ')}
-Hình thức thanh toán: ${job.paymentMethod || 'Không rõ'}
+Hình thức thanh toán: ${paymentMethodVn || 'Không rõ'}
 Địa chỉ: ${job.address || 'Không rõ'}`.trim();
 
       const response = await this.geminiService.generateContent(
