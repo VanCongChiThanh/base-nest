@@ -54,7 +54,6 @@ export class EkycService {
     }
 
     this.validateOAuthConfig();
-
     const response = await fetch(this.ekycConf.oauthUrl, {
       method: 'POST',
       headers: {
@@ -68,7 +67,7 @@ export class EkycService {
         client_secret: this.ekycConf.clientSecret,
       }),
     });
-
+    //log.debug('VNPT OAuth response status:', response.status);
     const raw = await response.text();
     let tokenData: VnptOauthTokenResponse | null = null;
 
