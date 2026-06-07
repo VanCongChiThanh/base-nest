@@ -78,6 +78,7 @@ export class AiEmbeddingProcessor {
       let companyName = job.employer?.firstName
         ? `${job.employer.firstName} ${job.employer.lastName}`
         : undefined;
+        
       try {
         const empProfile = await this.employerProfileRepo.findOne({
           where: { userId: job.employerId },
