@@ -81,6 +81,7 @@ export class AiController {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
 
     try {
       const stream = this.chatbotService.chatStream(

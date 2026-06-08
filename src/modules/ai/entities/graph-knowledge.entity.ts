@@ -71,11 +71,11 @@ export class GraphKnowledge {
   // ─── Denormalized Metadata for Filtering ──────────────────────
 
   /** Category name (denormalized from job_categories) */
-  @Column({ name: 'category_name', nullable: true })
+  @Column({ name: 'category_name', type: 'varchar', nullable: true })
   categoryName: string | null;
 
   /** Category ID for exact match */
-  @Column({ name: 'category_id', nullable: true })
+  @Column({ name: 'category_id', type: 'varchar', nullable: true })
   categoryId: string | null;
 
   /** Skill names as array (denormalized) */
@@ -83,15 +83,15 @@ export class GraphKnowledge {
   skillNames: string[];
 
   /** Province code for location filtering */
-  @Column({ name: 'province_code', nullable: true })
+  @Column({ name: 'province_code', type: 'varchar', nullable: true })
   provinceCode: string | null;
 
   /** Ward code for finer location filtering */
-  @Column({ name: 'ward_code', nullable: true })
+  @Column({ name: 'ward_code', type: 'varchar', nullable: true })
   wardCode: string | null;
 
   /** Full address text */
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   address: string | null;
 
   /** Salary/price numeric for range filtering */
@@ -105,7 +105,7 @@ export class GraphKnowledge {
   priceNumeric: number;
 
   /** Display-friendly salary/price string */
-  @Column({ name: 'price_display', nullable: true })
+  @Column({ name: 'price_display', type: 'varchar', nullable: true })
   priceDisplay: string | null;
 
   /** Average rating (precomputed from reviews) */
@@ -131,11 +131,11 @@ export class GraphKnowledge {
   isAvailable: boolean;
 
   /** Owner/employer/worker user ID */
-  @Column({ name: 'owner_id', nullable: true })
+  @Column({ name: 'owner_id', type: 'varchar', nullable: true })
   ownerId: string | null;
 
   /** Owner display name */
-  @Column({ name: 'owner_name', nullable: true })
+  @Column({ name: 'owner_name', type: 'varchar', nullable: true })
   ownerName: string | null;
 
   /**

@@ -38,11 +38,14 @@ export class GeminiService {
     }
 
     return this.withRetry(async () => {
-      const response = await this.ai.models.generateContent({
-        model: this.config.generationModel,
-        contents: prompt,
-        config: systemInstruction ? { systemInstruction } : undefined,
-      });
+      const response = await this.withTimeout(
+        this.ai.models.generateContent({
+          model: this.config.generationModel,
+          contents: prompt,
+          config: systemInstruction ? { systemInstruction } : undefined,
+        }),
+        15000, // 15 seconds timeout
+      );
       return response.text || '';
     });
   }
@@ -74,11 +77,14 @@ export class GeminiService {
     }
 
     return this.withRetry(async () => {
-      const response = await this.ai.models.embedContent({
-        model: this.config.embeddingModel,
-        contents: text,
-        config: { outputDimensionality: this.config.embeddingDimension },
-      });
+      const response = await this.withTimeout(
+        this.ai.models.embedContent({
+          model: this.config.embeddingModel,
+          contents: text,
+          config: { outputDimensionality: this.config.embeddingDimension },
+        }),
+        10000, // 10 seconds timeout
+      );
       return response.embeddings?.[0]?.values || [];
     });
   }
@@ -94,11 +100,14 @@ export class GeminiService {
       const batch = texts.slice(i, i + batchSize);
 
       const response = await this.withRetry(() =>
-        this.ai.models.embedContent({
-          model: this.config.embeddingModel,
-          contents: batch,
-          config: { outputDimensionality: this.config.embeddingDimension },
-        }),
+        this.withTimeout(
+          this.ai.models.embedContent({
+            model: this.config.embeddingModel,
+            contents: batch,
+            config: { outputDimensionality: this.config.embeddingDimension },
+          }),
+          15000, // 15 seconds for batch
+        ),
       );
 
       const batchValues = response.embeddings?.map((e) => e.values || []) || [];
@@ -125,18 +134,39 @@ export class GeminiService {
     if (!this.isAvailable) return null;
 
     return this.withRetry(async () => {
-      const response = await this.ai.models.generateContent({
-        model: this.config.generationModel,
-        contents: prompt,
-        config: {
-          ...(systemInstruction ? { systemInstruction } : {}),
-          responseMimeType: 'application/json',
-        },
-      });
+      const response = await this.withTimeout(
+        this.ai.models.generateContent({
+          model: this.config.generationModel,
+          contents: prompt,
+          config: {
+            ...(systemInstruction ? { systemInstruction } : {}),
+            responseMimeType: 'application/json',
+          },
+        }),
+        30000,
+      );
       const text = response.text?.trim() ?? '';
       if (!text) return null;
       return JSON.parse(text) as T;
     });
+  }
+
+  /**
+   * Helper to wrap promises with a strict timeout
+   */
+  private async withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+    let timeoutId: NodeJS.Timeout;
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`Gemini API timeout after ${ms}ms`));
+      }, ms);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutId!);
+    }
   }
 
   /**
