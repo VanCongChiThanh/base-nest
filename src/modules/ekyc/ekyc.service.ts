@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -23,6 +24,8 @@ interface VnptOauthTokenResponse {
 
 @Injectable()
 export class EkycService {
+  private readonly logger = new Logger(EkycService.name);
+
   constructor(
     @Inject(ekycConfig.KEY)
     private readonly ekycConf: ConfigType<typeof ekycConfig>,
@@ -67,17 +70,19 @@ export class EkycService {
         client_secret: this.ekycConf.clientSecret,
       }),
     });
-    //log.debug('VNPT OAuth response status:', response.status);
     const raw = await response.text();
+    this.logger.debug(`VNPT OAuth raw response: ${raw}`);
     let tokenData: VnptOauthTokenResponse | null = null;
 
     try {
       tokenData = JSON.parse(raw) as VnptOauthTokenResponse;
-    } catch {
+    } catch (error) {
+      this.logger.error(`Failed to parse VNPT token response: ${raw}`, error instanceof Error ? error.stack : error);
       throw new InternalServerErrorException('VNPT token response is invalid');
     }
 
     if (!response.ok || !tokenData?.access_token) {
+      this.logger.error(`VNPT OAuth failed with status: ${response.status}, response: ${raw}`);
       throw new BadRequestException(
         'Unable to get VNPT access token. Check credentials and endpoint.',
       );
@@ -94,6 +99,7 @@ export class EkycService {
     const resolvedPublicKey = payload.publicKey || this.ekycConf.publicKey;
 
     if (!resolvedPublicKey) {
+      this.logger.error('verifySignature: publicKey is missing');
       throw new BadRequestException(
         'publicKey is required (payload.publicKey or VNPT_EKYC_PUBLIC_KEY).',
       );
@@ -131,10 +137,15 @@ export class EkycService {
     });
 
     if (!verificationResult.isValidSignature) {
+      this.logger.error('completeVerification: VNPT signature is invalid', { payload });
       throw new BadRequestException('VNPT signature is invalid.');
     }
 
     if (payload.responseData && verificationResult.isPayloadMatched === false) {
+      this.logger.error('completeVerification: Payload mismatch', { 
+        payloadResponseData: payload.responseData, 
+        decodedPayload: verificationResult.decodedPayload 
+      });
       throw new BadRequestException(
         'Payload mismatch with dataBase64. Verification aborted.',
       );
@@ -165,11 +176,13 @@ export class EkycService {
       checkingWarning.includes('nhòe') ||
       checkingWarning.includes('nhoè')
     ) {
+      this.logger.error(`OCR warning: Image is blurred`, { warningMsg });
       throw new BadRequestException(
         'Ảnh giấy tờ tùy thân quá mờ hoặc nhòe. Vui lòng chụp lại ảnh rõ nét hơn.',
       );
     }
     if (checkingWarning.includes('chói') || checkingWarning.includes('lóa')) {
+      this.logger.error(`OCR warning: Image is glaring`, { warningMsg });
       throw new BadRequestException(
         'Ảnh giấy tờ tùy thân bị chói sáng. Vui lòng chụp lại.',
       );
@@ -183,6 +196,7 @@ export class EkycService {
       qualityFront?.final_result?.blurred_likelihood === 'likely' ||
       qualityBack?.final_result?.blurred_likelihood === 'likely'
     ) {
+      this.logger.error(`OCR quality: Image is blurred likelihood`, { qualityFront, qualityBack });
       throw new BadRequestException(
         'Hình ảnh giấy tờ bị mờ. Vui lòng chụp lại cho rõ viền và chữ.',
       );
@@ -192,6 +206,7 @@ export class EkycService {
       qualityFront?.final_result?.bad_luminance_likelihood === 'likely' ||
       qualityBack?.final_result?.bad_luminance_likelihood === 'likely'
     ) {
+      this.logger.error(`OCR quality: Bad luminance likelihood`, { qualityFront, qualityBack });
       throw new BadRequestException(
         'Lỗi ánh sáng (quá chói hoặc quá tối). Vui lòng chụp lại giấy tờ.',
       );
@@ -199,6 +214,7 @@ export class EkycService {
 
     const ocrValid = ocr.valid;
     if (ocrValid === false || ocrValid === 'False') {
+      this.logger.error(`OCR valid is false`, { ocrValid });
       throw new BadRequestException(
         'Trích xuất thông tin thất bại hoặc giấy tờ không hợp lệ. Vui lòng thử lại.',
       );
@@ -207,6 +223,7 @@ export class EkycService {
     // ─── Check duplicate CCCD ───
     const idNumber = this.safeString(ocr.id);
     if (!idNumber) {
+      this.logger.error(`OCR id extraction failed`, { ocr });
       throw new BadRequestException(
         'Không nhận diện được số CCCD/CMND từ ảnh.',
       );
@@ -336,7 +353,8 @@ export class EkycService {
         publicKey,
         Buffer.from(dataSignBase64, 'base64'),
       );
-    } catch {
+    } catch (error) {
+      this.logger.error('Failed to verify signature', error instanceof Error ? error.stack : error);
       throw new BadRequestException(
         'Failed to verify signature. Check public key and payload format.',
       );
@@ -347,7 +365,8 @@ export class EkycService {
     try {
       const jsonString = Buffer.from(dataBase64, 'base64').toString('utf8');
       return JSON.parse(jsonString) as unknown;
-    } catch {
+    } catch (error) {
+      this.logger.error('dataBase64 is not a valid base64 JSON payload', error instanceof Error ? error.stack : error);
       throw new BadRequestException(
         'dataBase64 is not a valid base64 JSON payload',
       );
