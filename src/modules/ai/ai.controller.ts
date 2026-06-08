@@ -79,8 +79,12 @@ export class AiController {
     @Res() res: Response,
   ) {
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    // `no-transform` stops CDNs/proxies (Cloudflare, etc.) from re-buffering;
+    // `X-Accel-Buffering: no` disables nginx/ingress response buffering so each
+    // SSE chunk reaches the browser immediately instead of arriving in one blob.
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
     try {
