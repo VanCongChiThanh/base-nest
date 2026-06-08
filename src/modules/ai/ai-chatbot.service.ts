@@ -161,11 +161,15 @@ Nhiệm vụ:
 - Nếu người dùng tìm việc hoặc tìm ứng viên và ngữ cảnh có dữ liệu phù hợp,
   hãy liệt kê TRỰC TIẾP (tên, địa điểm, lương/giá). KHÔNG hướng dẫn dùng bộ lọc nếu đã có dữ liệu.
 
-Quy tắc:
+Quy tắc TUYỆT ĐỐI (không được vi phạm):
 1. Trả lời tiếng Việt, thân thiện, đi thẳng vào vấn đề.
-2. Chỉ dùng dữ liệu trong phần "Ngữ cảnh" — KHÔNG bịa đặt.
-3. Nếu không có dữ liệu phù hợp, nói rõ và gợi ý người dùng dùng bộ lọc tìm kiếm.
-4. Trình bày danh sách dễ đọc khi có nhiều kết quả.`;
+2. CHỈ được dùng dữ liệu xuất hiện trong phần "Ngữ cảnh". TUYỆT ĐỐI KHÔNG bịa, không suy đoán,
+   không lấy công việc/ứng viên/tên/địa chỉ/mức lương từ kiến thức bên ngoài hay từ Internet.
+3. Khi liệt kê công việc hoặc ứng viên, CHỈ liệt kê đúng những mục có trong "Ngữ cảnh".
+   Nếu "Ngữ cảnh" trống hoặc không có mục phù hợp → nói rõ "hiện chưa có dữ liệu phù hợp trong hệ thống"
+   và gợi ý dùng bộ lọc tìm kiếm. KHÔNG được tự tạo ra danh sách công việc/ứng viên nào khác.
+4. Không bao giờ phát minh ra số liệu (lương, địa điểm, số lượng) không có trong "Ngữ cảnh".
+5. Trình bày danh sách dễ đọc khi có nhiều kết quả.`;
 
 // ─── Service ─────────────────────────────────────────────────────────────────
 
@@ -243,6 +247,24 @@ export class AiChatbotService {
       analysis.rewritten_query || message,
       analysis.intent,
     );
+
+    // 3b. NO-DATA GUARD — anti-hallucination:
+    //     For job/candidate searches, the ONLY valid answer is the retrieved list.
+    //     If retrieval found nothing, never let the LLM invent jobs from its
+    //     training data. Return a deterministic message and skip generation.
+    if (this.shouldShortCircuit(analysis.intent, references, context)) {
+      const response = this.buildNoResultMessage(analysis.intent);
+      session.messages.push(
+        { role: 'user', content: message, timestamp: new Date().toISOString() },
+        {
+          role: 'assistant',
+          content: response,
+          timestamp: new Date().toISOString(),
+        },
+      );
+      await this.chatSessionRepo.save(session);
+      return { message: response, sessionId: session.id };
+    }
 
     // 4. Build prompt
     const chatHistory = session.messages.slice(-this.config.chatHistoryLimit);
@@ -327,6 +349,23 @@ export class AiChatbotService {
         references: references.length > 0 ? references : undefined,
       },
     };
+
+    // 3b. NO-DATA GUARD — anti-hallucination (see chat()).
+    if (this.shouldShortCircuit(analysis.intent, references, context)) {
+      const response = this.buildNoResultMessage(analysis.intent);
+      yield { chunk: response };
+      session.messages.push(
+        { role: 'user', content: message, timestamp: new Date().toISOString() },
+        {
+          role: 'assistant',
+          content: response,
+          timestamp: new Date().toISOString(),
+        },
+      );
+      await this.chatSessionRepo.save(session);
+      yield { isDone: true };
+      return;
+    }
 
     // 4. Build prompt
     const chatHistory = session.messages.slice(-this.config.chatHistoryLimit);
@@ -538,6 +577,39 @@ export class AiChatbotService {
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
+
+  /**
+   * Anti-hallucination gate. Returns true when we must NOT call the LLM because
+   * there is no grounded data to answer a search query.
+   *
+   * - find_job / find_candidate: the answer IS the retrieved card list. If there
+   *   are no references, the LLM has nothing legitimate to list → short-circuit.
+   * - general: only short-circuit when both references and context are empty.
+   * - platform_qa: never short-circuit — guidance answers are allowed.
+   */
+  private shouldShortCircuit(
+    intent: QueryIntent,
+    references: ChatReference[],
+    context: string,
+  ): boolean {
+    if (intent === 'find_job' || intent === 'find_candidate') {
+      return references.length === 0;
+    }
+    if (intent === 'general') {
+      return references.length === 0 && (!context || context.trim() === '');
+    }
+    return false;
+  }
+
+  private buildNoResultMessage(intent: QueryIntent): string {
+    if (intent === 'find_job') {
+      return 'Hiện tại mình chưa tìm thấy công việc nào phù hợp trong hệ thống GigWork. Bạn thử dùng bộ lọc ở trang Tìm việc, hoặc cho mình biết rõ hơn về địa điểm và loại việc để mình hỗ trợ nhé.';
+    }
+    if (intent === 'find_candidate') {
+      return 'Hiện mình chưa tìm thấy ứng viên/thợ phù hợp trong hệ thống. Bạn thử mô tả rõ hơn về kỹ năng hoặc khu vực cần tìm để mình tìm lại nhé.';
+    }
+    return 'Mình chưa tìm thấy thông tin phù hợp trong hệ thống GigWork. Bạn thử diễn đạt lại câu hỏi hoặc dùng bộ lọc tìm kiếm giúp mình nhé.';
+  }
 
   private async runGraphRetrieval(
     rawQuery: string,

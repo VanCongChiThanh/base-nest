@@ -1,13 +1,13 @@
-import { IsString, IsNotEmpty, IsUUID, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsUUID, IsOptional, IsEnum } from 'class-validator';
 
 export class CreateReportDto {
   @IsUUID()
   @IsNotEmpty()
-  reportedUserId: string;
+  targetId: string;
 
-  @IsOptional()
-  @IsUUID()
-  jobId?: string;
+  @IsEnum(['USER', 'JOB'])
+  @IsNotEmpty()
+  targetType: 'USER' | 'JOB';
 
   @IsString()
   @IsNotEmpty()

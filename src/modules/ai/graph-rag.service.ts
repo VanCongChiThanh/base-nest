@@ -37,6 +37,13 @@ const CACHE_TTL = 120; // 2 minutes
 const TOP_K = 10;
 const RERANK_TOP = 5;
 
+// Cosine-similarity floors for vector search.
+// Primary keeps precision high; if it returns nothing we widen the net once
+// with a relaxed floor so genuinely relevant (but lexically distant) items can
+// still surface instead of leaving the chatbot with empty context.
+const PRIMARY_MIN_SCORE = 0.65;
+const FALLBACK_MIN_SCORE = 0.45;
+
 @Injectable()
 export class GraphRagService {
   private readonly logger = new Logger(GraphRagService.name);
@@ -79,8 +86,23 @@ export class GraphRagService {
     // 2. Build metadata WHERE clauses
     const { whereClause, params } = this.buildMetadataWhere(filter, embedding);
 
-    // 3. Hybrid: metadata filter + vector search
-    const rows = await this.vectorSearchWithFilter(whereClause, params, TOP_K);
+    // 3. Hybrid: metadata filter + vector search (primary precision pass).
+    let rows = await this.vectorSearchWithFilter(
+      whereClause,
+      params,
+      TOP_K,
+      PRIMARY_MIN_SCORE,
+    );
+
+    // 3b. Recall fallback: nothing cleared the precision floor → widen once.
+    if (rows.length === 0) {
+      rows = await this.vectorSearchWithFilter(
+        whereClause,
+        params,
+        TOP_K,
+        FALLBACK_MIN_SCORE,
+      );
+    }
 
     if (rows.length === 0) {
       return { context: '', nodes: [], sources: [] };
@@ -154,14 +176,31 @@ export class GraphRagService {
     const contentHash = this.hash(content);
     const sourceId = `job_${jobId}`;
 
+    // Availability/active flag — drives whether the job is shown by the retriever.
+    // NOTE: status is intentionally NOT part of content/contentHash, so we must
+    // compare it explicitly below; otherwise a closed job (same content) would be
+    // skipped and keep showing up in chatbot suggestions.
+    const isOpenActive =
+      row.status === 'OPEN' &&
+      !(row.end_time && new Date(row.end_time) < new Date()) &&
+      !(row.deadline && new Date(row.deadline) < new Date());
+
     const existing = await this.graphRepo.findOne({ where: { sourceId } });
-    // Keep syncing when embedding is missing so failed/partial old runs can self-heal.
-    // Without this, rows with NULL embedding are permanently skipped if content is unchanged.
-    const needsEmbeddingBackfill =
+    // A node "has embedding" only when it's a real, non-empty vector.
+    const hasEmbedding =
       !!existing &&
-      (!Array.isArray(existing.embedding) || existing.embedding.length === 0);
-    if (existing?.contentHash === contentHash && !needsEmbeddingBackfill)
-      return false; // No change
+      Array.isArray(existing.embedding) &&
+      existing.embedding.length > 0;
+    // Skip only when content is unchanged, embedding exists AND the
+    // active/available state is already in sync.
+    if (
+      existing?.contentHash === contentHash &&
+      hasEmbedding &&
+      existing.isActive === isOpenActive &&
+      existing.isAvailable === isOpenActive
+    ) {
+      return false;
+    }
 
     const edges = this.buildJobEdges(row);
 
@@ -182,14 +221,17 @@ export class GraphRagService {
       avgRating: Number(row.avg_rating) || 0,
       reviewCount: Number(row.review_count) || 0,
       completedCount: Number(row.completed_count) || 0,
-      isAvailable: row.status === 'OPEN' && !(row.end_time && new Date(row.end_time) < new Date()) && !(row.deadline && new Date(row.deadline) < new Date()),
+      isAvailable: isOpenActive,
       ownerId: row.employer_id,
       ownerName: row.owner_name,
       edges,
-      isActive: row.status === 'OPEN' && !(row.end_time && new Date(row.end_time) < new Date()) && !(row.deadline && new Date(row.deadline) < new Date()),
+      isActive: isOpenActive,
     };
 
-    await this.upsertNode(sourceId, node, existing?.id);
+    // Literal policy: a job that already has an embedding is NEVER re-embedded
+    // (saves Gemini quota, avoids 429 storms). We still refresh metadata so that
+    // closed/expired jobs disappear and price/rating stay correct.
+    await this.upsertNode(sourceId, node, existing?.id, hasEmbedding);
     return true;
   }
 
@@ -242,12 +284,22 @@ export class GraphRagService {
     const contentHash = this.hash(content);
     const sourceId = `worker_service_${workerServiceId}`;
 
+    const isActive = !!row.is_active;
+    const isAvailable = !!row.is_available_now;
+
     const existing = await this.graphRepo.findOne({ where: { sourceId } });
-    const needsEmbeddingBackfill =
+    const hasEmbedding =
       !!existing &&
-      (!Array.isArray(existing.embedding) || existing.embedding.length === 0);
-    if (existing?.contentHash === contentHash && !needsEmbeddingBackfill)
+      Array.isArray(existing.embedding) &&
+      existing.embedding.length > 0;
+    if (
+      existing?.contentHash === contentHash &&
+      hasEmbedding &&
+      existing.isActive === isActive &&
+      existing.isAvailable === isAvailable
+    ) {
       return false;
+    }
 
     const edges = this.buildWorkerEdges(row, skillNames);
 
@@ -268,14 +320,15 @@ export class GraphRagService {
       avgRating: Number(row.avg_rating) || 0,
       reviewCount: Number(row.review_count) || 0,
       completedCount: Number(row.completed_count) || 0,
-      isAvailable: !!row.is_available_now,
+      isAvailable,
       ownerId: row.worker_id,
       ownerName: row.owner_name,
       edges,
-      isActive: !!row.is_active,
+      isActive,
     };
 
-    await this.upsertNode(sourceId, node, existing?.id);
+    // Literal policy: keep existing embedding, refresh metadata only.
+    await this.upsertNode(sourceId, node, existing?.id, hasEmbedding);
     return true;
   }
 
@@ -468,8 +521,12 @@ export class GraphRagService {
     whereClause: string,
     params: unknown[],
     limit: number,
+    minScore: number = PRIMARY_MIN_SCORE,
   ): Promise<GraphKnowledge[]> {
     try {
+      // minScore is an internal numeric constant (never user input), so inlining
+      // it as a literal is safe and keeps the existing $1/$2 param indexes.
+      const safeMin = Number.isFinite(minScore) ? minScore : PRIMARY_MIN_SCORE;
       const sql = `
         SELECT id, node_type, source_id, title, content, category_name, category_id,
                skill_names, province_code, ward_code, address,
@@ -480,7 +537,7 @@ export class GraphRagService {
         FROM graph_knowledge
         WHERE is_active = true
           AND embedding IS NOT NULL
-          AND 1 - (embedding::vector <=> $1::vector) >= 0.65
+          AND 1 - (embedding::vector <=> $1::vector) >= ${safeMin}
           ${whereClause}
         ORDER BY embedding::vector <=> $1::vector
         LIMIT $2
@@ -717,23 +774,30 @@ export class GraphRagService {
     sourceId: string,
     node: Partial<GraphKnowledge>,
     existingId?: string,
+    skipEmbedding = false,
   ): Promise<void> {
-    // Generate embedding for the node content
-    let embeddingVector: number[] = [];
-    try {
-      if (this.geminiService.isAvailable && node.content) {
-        embeddingVector = await this.geminiService.embedText(node.content);
+    // Embedding strategy:
+    //  - skipEmbedding=true  → node already has a valid vector. Refresh metadata
+    //    only, keep the existing embedding (literal "don't re-embed" policy).
+    //  - skipEmbedding=false → node has no/invalid embedding. Generate it. If the
+    //    Gemini call fails (after its internal retries) we THROW instead of
+    //    persisting a NULL-embedding row, so Bull can retry and we never create
+    //    a "phantom synced" row that the retriever silently ignores.
+    let vectorStr: string | null = null;
+
+    if (!skipEmbedding) {
+      if (!this.geminiService.isAvailable || !node.content) {
+        throw new Error(
+          `[GraphRAG] Cannot embed ${sourceId}: Gemini unavailable or empty content`,
+        );
       }
-    } catch (err: any) {
-      this.logger.warn(
-        `[GraphRAG] Embedding failed for ${sourceId}`,
-        err?.message,
-      );
+      const embeddingVector = await this.geminiService.embedText(node.content);
+      if (!embeddingVector.length) {
+        throw new Error(`[GraphRAG] Empty embedding returned for ${sourceId}`);
+      }
+      vectorStr = `[${embeddingVector.join(',')}]`;
     }
 
-    const vectorStr = embeddingVector.length
-      ? `[${embeddingVector.join(',')}]`
-      : null;
     const meta = { sourceId, nodeType: node.nodeType };
 
     if (existingId) {
