@@ -602,7 +602,7 @@ export class JobService {
     }
     const now = new Date();
     if ((job.endTime && new Date(job.endTime) < now) || (job.deadline && new Date(job.deadline) < now)) {
-      throw new BadRequestException('Công việc này đã quá hạn ứng tuyển.');
+      throw new BadRequestException(JOB_ERRORS.JOB_EXPIRED);
     }
     if (job.employerId === workerId) {
       throw new BadRequestException(APPLICATION_ERRORS.APPLICATION_SELF_APPLY);
