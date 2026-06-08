@@ -16,6 +16,7 @@ import {
   BadRequestException,
   AuthProvider,
   Role,
+  VerificationLevel,
 } from '../../common';
 import { ProfileService } from '../profile/profile.service';
 import { CreateOrganizationDto, CreateRecruiterDto } from './dto';
@@ -65,14 +66,19 @@ export class UserService {
       lastName: dto.lastName,
       role: Role.ORGANIZATION,
       isEmailVerified: true,
+      verificationLevel: VerificationLevel.BUSINESS,
     });
     user.password = await bcrypt.hash(dto.password, 10);
     const savedUser = await this.userRepository.save(user);
 
-    await this.profileService.createEmployerProfile(savedUser.id, {
-      companyName: dto.companyName,
-      companyDescription: '',
-    });
+    await this.profileService.createEmployerProfile(
+      savedUser.id,
+      {
+        companyName: dto.companyName,
+        companyDescription: '',
+      },
+      true,
+    );
 
     return savedUser;
   }

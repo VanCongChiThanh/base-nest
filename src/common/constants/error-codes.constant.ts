@@ -350,6 +350,10 @@ export const JOB_ERRORS = {
     code: 'JOB_NEGOTIATE_ALREADY_ACCEPTED',
     message: 'Hợp đồng đã được chấp nhận, không thể đổi giá',
   },
+  JOB_EXPIRED: {
+    code: 'JOB_EXPIRED',
+    message: 'Công việc này đã quá hạn ứng tuyển',
+  },
 } as const;
 
 // ==================== JOB APPLICATION ====================

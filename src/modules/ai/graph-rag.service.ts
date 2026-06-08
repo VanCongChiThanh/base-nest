@@ -116,6 +116,7 @@ export class GraphRagService {
       `SELECT
          j.id, j.title, j.description, j.salary_per_hour, j."salaryType" as salary_type,
          j.address, j.province_code, j.ward_code, j.status,
+         j.end_time, j.deadline,
          j.employer_id,
          u.first_name || ' ' || u.last_name AS owner_name,
          jc.id AS category_id, jc.name AS category_name,
@@ -181,11 +182,11 @@ export class GraphRagService {
       avgRating: Number(row.avg_rating) || 0,
       reviewCount: Number(row.review_count) || 0,
       completedCount: Number(row.completed_count) || 0,
-      isAvailable: row.status === 'OPEN',
+      isAvailable: row.status === 'OPEN' && !(row.end_time && new Date(row.end_time) < new Date()) && !(row.deadline && new Date(row.deadline) < new Date()),
       ownerId: row.employer_id,
       ownerName: row.owner_name,
       edges,
-      isActive: row.status === 'OPEN',
+      isActive: row.status === 'OPEN' && !(row.end_time && new Date(row.end_time) < new Date()) && !(row.deadline && new Date(row.deadline) < new Date()),
     };
 
     await this.upsertNode(sourceId, node, existing?.id);
@@ -479,6 +480,7 @@ export class GraphRagService {
         FROM graph_knowledge
         WHERE is_active = true
           AND embedding IS NOT NULL
+          AND 1 - (embedding::vector <=> $1::vector) >= 0.35
           ${whereClause}
         ORDER BY embedding::vector <=> $1::vector
         LIMIT $2
