@@ -29,7 +29,7 @@ export class AiDbInitService implements OnApplicationBootstrap {
     }
   }
 
-  private async ensureGraphKnowledgeTable(): Promise<void> {
+  async ensureGraphKnowledgeTable(): Promise<void> {
     try {
       // Create graph_knowledge table if not exists
       await this.dataSource.query(`

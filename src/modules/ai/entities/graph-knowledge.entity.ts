@@ -22,7 +22,21 @@ import {
  * This allows metadata-first filtering BEFORE vector search,
  * dramatically reducing the candidate set.
  */
-@Entity('graph_knowledge')
+/**
+ * `synchronize: false` is INTENTIONAL and critical.
+ *
+ * The `embedding` column is a pgvector `vector(768)` type, which TypeORM 0.3.x
+ * does not understand (it's declared here as `text` only so the transformer can
+ * read/write it). With global `synchronize: true`, TypeORM would "correct" the
+ * column back to `text` on every boot, which then triggered AiSeedService to
+ * DROP & recreate it — wiping ALL embeddings to NULL on every deploy.
+ *
+ * By opting this single entity out of schema sync, TypeORM never touches the
+ * table: the column stays `vector(768)` permanently and embeddings survive
+ * deploys. The table/columns/indexes are managed via raw SQL in
+ * AiDbInitService + AiSeedService instead.
+ */
+@Entity('graph_knowledge', { synchronize: false })
 @Index('idx_gk_node_type', ['nodeType'])
 @Index('idx_gk_source_id', ['sourceId'], { unique: true })
 @Index('idx_gk_is_active', ['isActive'])
