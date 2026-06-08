@@ -141,13 +141,14 @@ export class ProfileService {
   async createEmployerProfile(
     userId: string,
     dto: CreateEmployerProfileDto,
+    isVerifiedBusiness: boolean = false,
   ): Promise<EmployerProfile> {
     const existing = await this.employerRepo.findOne({ where: { userId } });
     if (existing) {
       throw new ConflictException(PROFILE_ERRORS.PROFILE_ALREADY_EXISTS);
     }
 
-    const profile = this.employerRepo.create({ ...dto, userId });
+    const profile = this.employerRepo.create({ ...dto, userId, isVerifiedBusiness });
     return this.employerRepo.save(profile);
   }
 
