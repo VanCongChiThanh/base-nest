@@ -508,6 +508,14 @@ export const REPORT_ERRORS = {
     code: 'REPORT_ALREADY_EXISTS',
     message: 'You have already reported this user for this job',
   },
+  REPORT_INVALID_TARGET_TYPE: {
+    code: 'REPORT_INVALID_TARGET_TYPE',
+    message: 'Invalid target type',
+  },
+  REPORT_JOB_OWNER_NOT_FOUND: {
+    code: 'REPORT_JOB_OWNER_NOT_FOUND',
+    message: 'Cannot report this job (no owner found)',
+  },
 } as const;
 
 // ==================== LOCATION ====================

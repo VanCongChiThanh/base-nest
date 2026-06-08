@@ -5,25 +5,51 @@ import { Report } from './entities';
 import { CreateReportDto, UpdateReportDto } from './dto';
 import {
   REPORT_ERRORS,
+  JOB_ERRORS,
   NotFoundException,
   BadRequestException,
 } from '../../common';
+import { Job } from '../job/entities';
 
 @Injectable()
 export class ReportService {
   constructor(
     @InjectRepository(Report)
     private readonly reportRepository: Repository<Report>,
+    @InjectRepository(Job)
+    private readonly jobRepository: Repository<Job>,
   ) {}
 
   async create(reporterId: string, dto: CreateReportDto): Promise<Report> {
-    if (reporterId === dto.reportedUserId) {
+    let reportedUserId: string;
+    let jobId: string | undefined;
+
+    if (dto.targetType === 'USER') {
+      reportedUserId = dto.targetId;
+    } else if (dto.targetType === 'JOB') {
+      jobId = dto.targetId;
+      const job = await this.jobRepository.findOne({ where: { id: jobId } });
+      if (!job) {
+        throw new NotFoundException(JOB_ERRORS.JOB_NOT_FOUND);
+      }
+      reportedUserId = job.postedById || job.employerId;
+      if (!reportedUserId) {
+        throw new BadRequestException(REPORT_ERRORS.REPORT_JOB_OWNER_NOT_FOUND);
+      }
+    } else {
+      throw new BadRequestException(REPORT_ERRORS.REPORT_INVALID_TARGET_TYPE);
+    }
+
+    if (reporterId === reportedUserId) {
       throw new BadRequestException(REPORT_ERRORS.REPORT_SELF_REPORT);
     }
 
     const report = this.reportRepository.create({
-      ...dto,
+      reason: dto.reason,
+      description: dto.description,
       reporterId,
+      reportedUserId,
+      jobId,
     });
     return this.reportRepository.save(report);
   }
