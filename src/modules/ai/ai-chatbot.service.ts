@@ -67,7 +67,7 @@ const PLATFORM_LINK_MAP: {
       'căn cước',
     ],
     title: 'Xác thực tài khoản (eKYC)',
-    url: '/profile/kyc',
+    url: '/ekyc',
     description: 'Xác minh danh tính để mở khóa tính năng đầy đủ',
   },
   {
