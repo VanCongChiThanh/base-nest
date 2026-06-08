@@ -373,19 +373,45 @@ export class JobService {
       search,
       sortBy = 'createdAt',
       sortOrder = 'DESC',
+      employerId,
+      status = JobStatus.OPEN,
     } = filter;
 
     const qb = this.jobRepository
       .createQueryBuilder('job')
-      .leftJoinAndSelect('job.employer', 'employer')
-      .leftJoinAndSelect('job.postedBy', 'postedBy')
+      .leftJoin('job.employer', 'employer')
+      .addSelect([
+        'employer.id',
+        'employer.email',
+        'employer.firstName',
+        'employer.lastName',
+        'employer.role',
+        'employer.avatarUrl',
+        'employer.verificationLevel',
+        'employer.organizationId'
+      ])
+      .leftJoin('job.postedBy', 'postedBy')
+      .addSelect([
+        'postedBy.id',
+        'postedBy.email',
+        'postedBy.firstName',
+        'postedBy.lastName',
+        'postedBy.role',
+        'postedBy.avatarUrl',
+        'postedBy.verificationLevel',
+        'postedBy.organizationId'
+      ])
       .leftJoinAndSelect('job.category', 'category')
       .leftJoinAndSelect('job.jobSkills', 'jobSkills')
       .leftJoinAndSelect('jobSkills.skill', 'skill')
-      .where('job.status = :status', { status: JobStatus.OPEN })
+      .where('job.status = :status', { status })
       .andWhere('job.isDirectHire = false')
       .andWhere('(job.endTime IS NULL OR job.endTime >= NOW())')
       .andWhere('(job.deadline IS NULL OR job.deadline >= NOW())');
+
+    if (employerId) {
+      qb.andWhere('(job.employerId = :employerId OR job.postedById = :employerId)', { employerId });
+    }
 
     if (provinceCode) {
       qb.andWhere('job.provinceCode = :provinceCode', { provinceCode });
@@ -455,10 +481,35 @@ export class JobService {
   }
 
   async findJobById(id: string): Promise<Job> {
-    const job = await this.jobRepository.findOne({
-      where: { id },
-      relations: ['employer', 'postedBy', 'category', 'jobSkills', 'jobSkills.skill'],
-    });
+    const job = await this.jobRepository
+      .createQueryBuilder('job')
+      .leftJoin('job.employer', 'employer')
+      .addSelect([
+        'employer.id',
+        'employer.email',
+        'employer.firstName',
+        'employer.lastName',
+        'employer.role',
+        'employer.avatarUrl',
+        'employer.verificationLevel',
+        'employer.organizationId'
+      ])
+      .leftJoin('job.postedBy', 'postedBy')
+      .addSelect([
+        'postedBy.id',
+        'postedBy.email',
+        'postedBy.firstName',
+        'postedBy.lastName',
+        'postedBy.role',
+        'postedBy.avatarUrl',
+        'postedBy.verificationLevel',
+        'postedBy.organizationId'
+      ])
+      .leftJoinAndSelect('job.category', 'category')
+      .leftJoinAndSelect('job.jobSkills', 'jobSkills')
+      .leftJoinAndSelect('jobSkills.skill', 'skill')
+      .where('job.id = :id', { id })
+      .getOne();
     if (!job) {
       throw new NotFoundException(JOB_ERRORS.JOB_NOT_FOUND);
     }
