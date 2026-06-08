@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { GeminiService } from './gemini.service';
+import { AiDbInitService } from './ai-db-init.service';
 import { GraphKnowledge, ScamPattern } from './entities';
 
 const FAQ_SEEDS = [
@@ -208,10 +209,14 @@ export class AiSeedService implements OnModuleInit {
     @InjectRepository(ScamPattern)
     private readonly scamPatternRepo: Repository<ScamPattern>,
     private readonly dataSource: DataSource,
+    private readonly aiDbInit: AiDbInitService,
   ) {}
 
   async onModuleInit() {
     await this.ensureVectorExtension();
+    // graph_knowledge is opted out of TypeORM schema sync (synchronize: false),
+    // so we must guarantee the table exists ourselves before seeding into it.
+    await this.aiDbInit.ensureGraphKnowledgeTable();
     await this.ensureVectorColumns();
     await this.seedKnowledgeBase();
     await this.seedScamPatterns();
@@ -250,13 +255,25 @@ export class AiSeedService implements OnModuleInit {
         );
 
         if (colCheck.length > 0 && colCheck[0].data_type === 'text') {
+          // CRITICAL: convert IN PLACE — never DROP this column.
+          // `synchronize: true` flips this column vector→text on every boot
+          // (entity declares it as `text`); if we DROP+ADD here we wipe ALL
+          // embeddings to NULL on every deploy. Existing values are stored as
+          // '[...]' text and cast losslessly back to vector, so an in-place
+          // ALTER ... USING preserves the data.
           await this.dataSource.query(
-            `ALTER TABLE "${table}" DROP COLUMN IF EXISTS "${column}"`,
+            `ALTER TABLE "${table}"
+             ALTER COLUMN "${column}" TYPE vector(768)
+             USING (
+               CASE
+                 WHEN "${column}" IS NULL OR btrim("${column}"::text) = '' THEN NULL
+                 ELSE "${column}"::vector
+               END
+             )`,
           );
-          await this.dataSource.query(
-            `ALTER TABLE "${table}" ADD COLUMN "${column}" vector(768)`,
+          this.logger.log(
+            `✅ Converted ${table}.${column} text→vector(768) in place (data preserved)`,
           );
-          this.logger.log(`✅ Converted ${table}.${column} to vector(768)`);
         } else if (colCheck.length === 0) {
           await this.dataSource.query(
             `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${column}" vector(768)`,
