@@ -23,7 +23,7 @@ interface QueryAnalysis {
 
 const INTENT_CACHE_PREFIX = 'chatbot:intent:';
 const INTENT_CACHE_TTL = 60 * 60 * 24; // 24h
-const INTENT_LLM_TIMEOUT_MS = 1500;
+const INTENT_LLM_TIMEOUT_MS = 8000;
 
 // Score gap threshold to declare a node-type "dominant" in vector search.
 // If top score for a type beats the other type by this margin → exclusive.
@@ -650,15 +650,18 @@ export class AiChatbotService {
 
     const analysis = await this.analyzeQueryWithTimeout(query);
 
-    try {
-      await this.redis.set(
-        cacheKey,
-        JSON.stringify(analysis),
-        'EX',
-        INTENT_CACHE_TTL,
-      );
-    } catch {
-      /* non-fatal */
+    // Don't cache if it was a timeout fallback
+    if (!(analysis as any).isFallback) {
+      try {
+        await this.redis.set(
+          cacheKey,
+          JSON.stringify(analysis),
+          'EX',
+          INTENT_CACHE_TTL,
+        );
+      } catch {
+        /* non-fatal */
+      }
     }
 
     return analysis;
@@ -669,7 +672,8 @@ export class AiChatbotService {
       intent: 'general',
       category_filter: null,
       rewritten_query: query,
-    };
+      isFallback: true,
+    } as any;
 
     return Promise.race<QueryAnalysis>([
       this.analyzeQuery(query),

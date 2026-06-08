@@ -462,6 +462,7 @@ export class JobService {
     if (!job) {
       throw new NotFoundException(JOB_ERRORS.JOB_NOT_FOUND);
     }
+    this.applyExpirationStatus(job);
     await this.attachEmployerProfiles([job]);
     return job;
   }
@@ -478,7 +479,17 @@ export class JobService {
       skip: (page - 1) * limit,
       take: limit,
     });
+    data.forEach(job => this.applyExpirationStatus(job));
     return { data, total, page, limit };
+  }
+
+  private applyExpirationStatus(job: Job): void {
+    if (job.status === JobStatus.OPEN) {
+      const now = new Date();
+      if ((job.endTime && new Date(job.endTime) < now) || (job.deadline && new Date(job.deadline) < now)) {
+        job.status = JobStatus.CLOSED;
+      }
+    }
   }
 
   private async attachEmployerProfiles(jobs: Job[]): Promise<void> {
@@ -588,6 +599,10 @@ export class JobService {
 
     if (job.status !== JobStatus.OPEN) {
       throw new BadRequestException(JOB_ERRORS.JOB_NOT_OPEN);
+    }
+    const now = new Date();
+    if ((job.endTime && new Date(job.endTime) < now) || (job.deadline && new Date(job.deadline) < now)) {
+      throw new BadRequestException('Công việc này đã quá hạn ứng tuyển.');
     }
     if (job.employerId === workerId) {
       throw new BadRequestException(APPLICATION_ERRORS.APPLICATION_SELF_APPLY);
