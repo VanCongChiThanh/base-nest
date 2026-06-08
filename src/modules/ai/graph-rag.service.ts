@@ -171,12 +171,12 @@ export class GraphRagService {
       title: row.title,
       content,
       contentHash,
-      categoryId: row.category_id ?? undefined,
-      categoryName: row.category_name ?? undefined,
+      categoryId: row.category_id ?? null,
+      categoryName: row.category_name ?? null,
       skillNames: Array.isArray(row.skill_names) ? row.skill_names : [],
-      provinceCode: row.province_code ? String(row.province_code) : undefined,
-      wardCode: row.ward_code ? String(row.ward_code) : undefined,
-      address: row.address ?? undefined,
+      provinceCode: row.province_code ? String(row.province_code) : null,
+      wardCode: row.ward_code ? String(row.ward_code) : null,
+      address: row.address ?? null,
       priceNumeric: salary,
       priceDisplay: salaryDisplay,
       avgRating: Number(row.avg_rating) || 0,
@@ -257,12 +257,12 @@ export class GraphRagService {
       title: row.title,
       content,
       contentHash,
-      categoryId: row.category_id ?? undefined,
-      categoryName: row.category_name ?? undefined,
+      categoryId: row.category_id ?? null,
+      categoryName: row.category_name ?? null,
       skillNames,
-      provinceCode: row.province_code ? String(row.province_code) : undefined,
-      wardCode: row.ward_code ? String(row.ward_code) : undefined,
-      address: undefined,
+      provinceCode: row.province_code ? String(row.province_code) : null,
+      wardCode: row.ward_code ? String(row.ward_code) : null,
+      address: row.address ?? null,
       priceNumeric: price,
       priceDisplay,
       avgRating: Number(row.avg_rating) || 0,
@@ -480,7 +480,7 @@ export class GraphRagService {
         FROM graph_knowledge
         WHERE is_active = true
           AND embedding IS NOT NULL
-          AND 1 - (embedding::vector <=> $1::vector) >= 0.35
+          AND 1 - (embedding::vector <=> $1::vector) >= 0.65
           ${whereClause}
         ORDER BY embedding::vector <=> $1::vector
         LIMIT $2

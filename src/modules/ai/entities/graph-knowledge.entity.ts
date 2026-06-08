@@ -72,11 +72,11 @@ export class GraphKnowledge {
 
   /** Category name (denormalized from job_categories) */
   @Column({ name: 'category_name', nullable: true })
-  categoryName: string;
+  categoryName: string | null;
 
   /** Category ID for exact match */
   @Column({ name: 'category_id', nullable: true })
-  categoryId: string;
+  categoryId: string | null;
 
   /** Skill names as array (denormalized) */
   @Column({ name: 'skill_names', type: 'jsonb', default: [] })
@@ -84,15 +84,15 @@ export class GraphKnowledge {
 
   /** Province code for location filtering */
   @Column({ name: 'province_code', nullable: true })
-  provinceCode: string;
+  provinceCode: string | null;
 
   /** Ward code for finer location filtering */
   @Column({ name: 'ward_code', nullable: true })
-  wardCode: string;
+  wardCode: string | null;
 
   /** Full address text */
   @Column({ nullable: true })
-  address: string;
+  address: string | null;
 
   /** Salary/price numeric for range filtering */
   @Column({
@@ -106,7 +106,7 @@ export class GraphKnowledge {
 
   /** Display-friendly salary/price string */
   @Column({ name: 'price_display', nullable: true })
-  priceDisplay: string;
+  priceDisplay: string | null;
 
   /** Average rating (precomputed from reviews) */
   @Column({
@@ -132,11 +132,11 @@ export class GraphKnowledge {
 
   /** Owner/employer/worker user ID */
   @Column({ name: 'owner_id', nullable: true })
-  ownerId: string;
+  ownerId: string | null;
 
   /** Owner display name */
   @Column({ name: 'owner_name', nullable: true })
-  ownerName: string;
+  ownerName: string | null;
 
   /**
    * Graph edges as JSONB — related entity references
