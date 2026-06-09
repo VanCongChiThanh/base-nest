@@ -119,6 +119,66 @@ export class UserService {
   }
 
   /**
+   * Public profile: safe user fields plus a summary of any worker/employer
+   * profile (ratings, completed/posted jobs) so individual employers and
+   * workers both have a meaningful public page.
+   */
+  async getPublicProfile(id: string) {
+    const user = await this.findById(id);
+
+    let workerProfile: {
+      ratingAvg: number;
+      totalReviews: number;
+      totalJobsCompleted: number;
+      bio: string | null;
+    } | null = null;
+    let employerProfile: {
+      ratingAvg: number;
+      totalReviews: number;
+      totalJobsPosted: number;
+      companyName: string | null;
+      companyDescription: string | null;
+    } | null = null;
+
+    try {
+      const wp = await this.profileService.getWorkerProfile(id);
+      workerProfile = {
+        ratingAvg: Number(wp.ratingAvg) || 0,
+        totalReviews: wp.totalReviews ?? 0,
+        totalJobsCompleted: wp.totalJobsCompleted ?? 0,
+        bio: wp.bio ?? null,
+      };
+    } catch {
+      // user has no worker profile
+    }
+
+    try {
+      const ep = await this.profileService.getEmployerProfileByUserId(id);
+      employerProfile = {
+        ratingAvg: Number(ep.ratingAvg) || 0,
+        totalReviews: ep.totalReviews ?? 0,
+        totalJobsPosted: ep.totalJobsPosted ?? 0,
+        companyName: ep.companyName ?? null,
+        companyDescription: ep.companyDescription ?? null,
+      };
+    } catch {
+      // user has no employer profile
+    }
+
+    return {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      avatarUrl: user.avatarUrl,
+      role: user.role,
+      verificationLevel: user.verificationLevel,
+      createdAt: user.createdAt,
+      workerProfile,
+      employerProfile,
+    };
+  }
+
+  /**
    * Find user by email
    */
   async findByEmail(email: string): Promise<User | null> {

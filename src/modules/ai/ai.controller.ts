@@ -269,18 +269,23 @@ export class AiController {
       }
     }
 
+    const personalName = job.employer?.firstName
+      ? `${job.employer.firstName} ${job.employer.lastName}`
+      : undefined;
+
     const result = await this.scamDetectorService.analyzeJob({
       title: job.title,
       description: job.description,
-      companyName: job.employer?.firstName
-        ? `${job.employer.firstName} ${job.employer.lastName}`
-        : undefined,
+      companyName: personalName,
       address: job.address,
       salary: Number(job.salaryPerHour || job.totalBudget || 0),
       salaryText:
         job.salaryType === JobSalaryType.HOURLY
           ? `${Number(job.salaryPerHour).toLocaleString()}₫/giờ`
           : `${Number(job.totalBudget).toLocaleString()}₫ (Khoán)`,
+      // Controller path has no company profile lookup; if we only have a
+      // personal name it's safe to treat it as a personal post.
+      isPersonalPost: !!personalName,
     });
 
     // Cache the result in Redis with 30 days TTL

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { WorkerServiceEntity } from './entities/worker-service.entity';
 import {
   CreateWorkerServiceDto,
@@ -13,6 +13,7 @@ import { JobService } from '../job/job.service';
 import { AiSyncCronService } from '../ai/ai-sync-cron.service';
 import { SubscriptionService } from '../subscription';
 import { User } from '../user/entities';
+import { WorkerProfile } from '../profile/entities';
 import {
   BadRequestException,
   ForbiddenException,
@@ -28,6 +29,8 @@ export class WorkerServiceService {
     private readonly workerServiceRepo: Repository<WorkerServiceEntity>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(WorkerProfile)
+    private readonly workerProfileRepo: Repository<WorkerProfile>,
     private readonly aiSyncCronService: AiSyncCronService,
     private readonly jobService: JobService,
     private readonly subscriptionService: SubscriptionService,
@@ -74,6 +77,7 @@ export class WorkerServiceService {
         'worker.isEmailVerified',
         'worker.verificationLevel',
       ])
+      .leftJoin('worker_profiles', 'wp', 'wp.user_id = ws.worker_id')
       .leftJoinAndSelect('ws.category', 'category')
       .where('ws.isActive = :isActive', { isActive: true });
 
@@ -94,11 +98,43 @@ export class WorkerServiceService {
     if (maxPrice !== undefined)
       qb.andWhere('ws.price <= :maxPrice', { maxPrice });
 
-    qb.orderBy('ws.createdAt', 'DESC');
+    // Surface workers who are available now and well-rated, then most recent.
+    qb.orderBy('ws.isAvailableNow', 'DESC')
+      .addOrderBy('wp.rating_avg', 'DESC')
+      .addOrderBy('wp.total_jobs_completed', 'DESC')
+      .addOrderBy('ws.createdAt', 'DESC');
     qb.skip((page - 1) * limit).take(limit);
 
     const [data, total] = await qb.getManyAndCount();
+    await this.attachWorkerRatings(data);
     return { data, total, page, limit };
+  }
+
+  /**
+   * Attach a real rating summary (from worker_profiles) onto each service's
+   * worker so listing cards can show trustworthy stats instead of mock data.
+   */
+  private async attachWorkerRatings(
+    services: WorkerServiceEntity[],
+  ): Promise<void> {
+    if (!services.length) return;
+    const workerIds = [...new Set(services.map((s) => s.workerId))];
+    const profiles = await this.workerProfileRepo.find({
+      where: { userId: In(workerIds) },
+    });
+    const profileMap = new Map(profiles.map((p) => [p.userId, p]));
+    for (const service of services) {
+      const profile = profileMap.get(service.workerId);
+      if (service.worker) {
+        (service.worker as any).workerProfile = profile
+          ? {
+              ratingAvg: Number(profile.ratingAvg) || 0,
+              totalReviews: profile.totalReviews ?? 0,
+              totalJobsCompleted: profile.totalJobsCompleted ?? 0,
+            }
+          : null;
+      }
+    }
   }
 
   async findOne(id: string) {

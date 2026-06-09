@@ -55,6 +55,7 @@ export class ProfileController {
     return this.profileService.updateWorkerPrivacySettings(user.id, dto);
   }
 
+  @Public()
   @Get('worker/:id')
   async getWorkerProfile(@Param('id', ParseUUIDPipe) id: string) {
     return this.profileService.getWorkerProfileById(id);

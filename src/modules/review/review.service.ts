@@ -13,6 +13,7 @@ import {
 import { NotificationType, AssignmentStatus } from '../../common/enums';
 import { NotificationHelper } from '../notification';
 import { JobAssignment } from '../job/entities';
+import { WorkerProfile, EmployerProfile } from '../profile/entities';
 
 @Injectable()
 export class ReviewService {
@@ -21,6 +22,10 @@ export class ReviewService {
     private readonly reviewRepository: Repository<Review>,
     @InjectRepository(JobAssignment)
     private readonly assignmentRepository: Repository<JobAssignment>,
+    @InjectRepository(WorkerProfile)
+    private readonly workerProfileRepository: Repository<WorkerProfile>,
+    @InjectRepository(EmployerProfile)
+    private readonly employerProfileRepository: Repository<EmployerProfile>,
     private readonly notificationHelper: NotificationHelper,
   ) {}
 
@@ -57,6 +62,10 @@ export class ReviewService {
     });
     const saved = await this.reviewRepository.save(review);
 
+    // Recompute the reviewee's aggregate rating from real review rows so that
+    // profile ratingAvg / totalReviews stay in sync (no longer seed-only).
+    await this.recomputeUserRating(dto.revieweeId);
+
     // Notify reviewee
     await this.notificationHelper.send(
       dto.revieweeId,
@@ -66,6 +75,34 @@ export class ReviewService {
     );
 
     return saved;
+  }
+
+  /**
+   * Recompute and persist ratingAvg / totalReviews for a user from the
+   * reviews table. Updates whichever profile(s) the user has (worker and/or
+   * employer), since a single account can both hire and work.
+   */
+  async recomputeUserRating(userId: string): Promise<void> {
+    const stats = await this.reviewRepository
+      .createQueryBuilder('review')
+      .select('AVG(review.rating)', 'avg')
+      .addSelect('COUNT(review.id)', 'count')
+      .where('review.reviewee_id = :userId', { userId })
+      .getRawOne<{ avg: string | null; count: string }>();
+
+    const total = parseInt(stats?.count ?? '0', 10) || 0;
+    const avg = stats?.avg ? Math.round(parseFloat(stats.avg) * 100) / 100 : 0;
+
+    await Promise.all([
+      this.workerProfileRepository.update(
+        { userId },
+        { ratingAvg: avg, totalReviews: total },
+      ),
+      this.employerProfileRepository.update(
+        { userId },
+        { ratingAvg: avg, totalReviews: total },
+      ),
+    ]);
   }
 
   async findByJob(

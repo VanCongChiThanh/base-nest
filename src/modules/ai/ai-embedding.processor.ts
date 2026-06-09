@@ -110,6 +110,14 @@ export class AiEmbeddingProcessor {
         ? `${job.address} (Tỉnh/Thành phố và Phường/Xã đã được chọn hợp lệ trên hệ thống)`
         : job.address;
 
+      // A post is "personal" when the employer has no registered company profile
+      // (companyName falls back to their personal full name). The scam detector
+      // uses this to avoid flagging Vietnamese personal names as suspicious.
+      const isPersonalPost = !!(
+        job.employer?.firstName &&
+        companyName === `${job.employer.firstName} ${job.employer.lastName}`
+      );
+
       const analysisResult = await this.scamDetectorService.analyzeJob({
         title: job.title,
         description: job.description,
@@ -119,6 +127,7 @@ export class AiEmbeddingProcessor {
         jobType: job.jobType,
         salary: Number(job.salaryPerHour || job.totalBudget || 0),
         salaryText,
+        isPersonalPost,
       });
 
       // Cache the result in Redis with 30 days TTL (2592000 seconds)

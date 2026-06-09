@@ -19,7 +19,7 @@ import {
   CreateOrganizationDto,
   CreateRecruiterDto,
 } from './dto';
-import { CurrentUser, Roles } from '../../common/decorators';
+import { CurrentUser, Roles, Public } from '../../common/decorators';
 import { User } from './entities';
 import { plainToInstance } from 'class-transformer';
 import { RolesGuard } from '../../common/guards';
@@ -39,21 +39,12 @@ export class UserController {
   }
 
   /**
-   * GET /users/:id/public - public profile
+   * GET /users/:id/public - public profile (no auth required)
    */
+  @Public()
   @Get(':id/public')
-  async getPublicProfile(
-    @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<Partial<UserResponseDto>> {
-    const user = await this.userService.findById(id);
-    // Return only safe fields
-    return {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      avatarUrl: user.avatarUrl,
-      createdAt: user.createdAt,
-    } as any;
+  async getPublicProfile(@Param('id', ParseUUIDPipe) id: string) {
+    return this.userService.getPublicProfile(id);
   }
 
   /**

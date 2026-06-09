@@ -34,7 +34,7 @@ const FAQ_SEEDS = [
     category: 'faq',
     title: 'eKYC là gì và tại sao cần xác thực?',
     content:
-      'eKYC (Electronic Know Your Customer) là quy trình xác thực danh tính điện tử sử dụng CMND/CCCD và nhận diện khuôn mặt. GigWork yêu cầu eKYC để: 1) Đảm bảo người dùng là người thật. 2) Tăng độ tin cậy cho nhà tuyển dụng. 3) Bảo vệ cộng đồng khỏi tài khoản giả mạo. Bạn chỉ cần xác thực 1 lần qua menu Hồ sơ > Xác thực danh tính.',
+      'eKYC (Electronic Know Your Customer) là quy trình xác thực danh tính điện tử sử dụng CMND/CCCD và nhận diện khuôn mặt. Trên GigWork, để đăng tin tuyển dụng bạn phải thuộc một trong các trường hợp sau: 1) Cá nhân đã hoàn thành xác thực eKYC. 2) Tài khoản tổ chức / doanh nghiệp đã được xác thực. 3) Tài khoản nhân viên thuộc tổ chức / doanh nghiệp đã được xác thực. Lợi ích: đảm bảo người đăng tuyển là người thật, tăng độ tin cậy và bảo vệ cộng đồng khỏi tài khoản giả mạo. Xác thực eKYC cá nhân chỉ cần thực hiện 1 lần qua menu Hồ sơ > Xác thực danh tính.',
   },
   {
     category: 'faq',

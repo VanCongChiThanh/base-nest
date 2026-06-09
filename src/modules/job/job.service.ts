@@ -28,14 +28,12 @@ import {
   JobType,
   JobSalaryType,
   OnlinePaymentType,
-  VerificationLevel,
   PaymentMethod,
   EscrowStatus,
 } from '../../common/enums';
 import { JobInvitationStatus } from './entities/job-invitation.entity';
 import { NotificationHelper } from '../notification';
 import { EmployerProfile, WorkerProfile } from '../profile/entities';
-import { EmployerBadge } from '../../common/enums/employer-badge.enum';
 import { AiSyncCronService } from '../ai/ai-sync-cron.service';
 
 export interface ProgressStep {
@@ -377,7 +375,110 @@ export class JobService {
       status = JobStatus.OPEN,
     } = filter;
 
-    const qb = this.jobRepository
+    // Step 1: rank + paginate at the ID level. We join only single-row
+    // relations (employer, employer_profile) here so the composite ORDER BY
+    // (trust + rating) can run in SQL before LIMIT, ranking across the whole
+    // result set rather than just one page (the previous in-memory sort only
+    // reordered the current page). Collection joins are added in step 2.
+    const distanceSql = `(6371 * acos(cos(radians(:latitude)) * cos(radians(job.latitude)) * cos(radians(job.longitude) - radians(:longitude)) + sin(radians(:latitude)) * sin(radians(job.latitude))))`;
+    const hasLocationFilter =
+      filter.latitude !== undefined &&
+      filter.longitude !== undefined &&
+      filter.radius !== undefined;
+
+    const rankQb = this.jobRepository
+      .createQueryBuilder('job')
+      .leftJoin('job.employer', 'employer')
+      .leftJoin(EmployerProfile, 'ep', 'ep.user_id = job.employer_id')
+      .where('job.status = :status', { status })
+      .andWhere('job.isDirectHire = false')
+      .andWhere('(job.endTime IS NULL OR job.endTime >= NOW())')
+      .andWhere('(job.deadline IS NULL OR job.deadline >= NOW())');
+
+    if (employerId) {
+      rankQb.andWhere(
+        '(job.employerId = :employerId OR job.postedById = :employerId)',
+        { employerId },
+      );
+    }
+    if (provinceCode) {
+      rankQb.andWhere('job.provinceCode = :provinceCode', { provinceCode });
+    }
+    if (wardCode) {
+      rankQb.andWhere('job.wardCode = :wardCode', { wardCode });
+    }
+    if (category) {
+      rankQb.andWhere('job.categoryId = :category', { category });
+    }
+    if (salaryMin) {
+      rankQb.andWhere('job.salaryPerHour >= :salaryMin', { salaryMin });
+    }
+    if (search) {
+      rankQb.andWhere(
+        '(job.title ILIKE :search OR job.description ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+    if (filter.jobType) {
+      rankQb.andWhere('job.jobType = :jobType', { jobType: filter.jobType });
+    }
+    if (hasLocationFilter) {
+      rankQb.andWhere(`${distanceSql} <= :radius`, {
+        latitude: filter.latitude,
+        longitude: filter.longitude,
+        radius: filter.radius,
+      });
+    }
+
+    const total = await rankQb.getCount();
+
+    const allowedSortFields = ['salaryPerHour', 'startTime', 'title'];
+    if (sortBy && sortBy !== 'createdAt' && allowedSortFields.includes(sortBy)) {
+      // Explicit user-chosen sort wins.
+      rankQb.orderBy(`job.${sortBy}`, sortOrder);
+    } else {
+      // Default browse order: trust signals, then employer rating, then recency.
+      rankQb
+        .orderBy(
+          `CASE WHEN employer.verification_level IN ('BASIC','BUSINESS') THEN 1 ELSE 0 END`,
+          'DESC',
+        )
+        .addOrderBy(`CASE WHEN ep.is_verified_business THEN 1 ELSE 0 END`, 'DESC')
+        .addOrderBy(
+          `CASE ep.badge WHEN 'TOP' THEN 3 WHEN 'TRUSTED' THEN 2 WHEN 'VERIFIED' THEN 1 ELSE 0 END`,
+          'DESC',
+        )
+        .addOrderBy('ep.rating_avg', 'DESC')
+        .addOrderBy('job.createdAt', 'DESC');
+    }
+
+    rankQb.select('job.id', 'id');
+    if (hasLocationFilter) {
+      rankQb.addSelect(distanceSql, 'distance');
+    }
+    rankQb.offset((page - 1) * limit).limit(limit);
+
+    const rankedRows = await rankQb.getRawMany<{
+      id: string;
+      distance?: string;
+    }>();
+    const orderedIds = rankedRows.map((r) => r.id);
+
+    if (orderedIds.length === 0) {
+      return { data: [], total, page, limit };
+    }
+
+    const distanceMap = new Map<string, number>();
+    if (hasLocationFilter) {
+      for (const row of rankedRows) {
+        if (row.distance !== undefined && row.distance !== null) {
+          distanceMap.set(row.id, parseFloat(row.distance));
+        }
+      }
+    }
+
+    // Step 2: hydrate the page with all relations, then restore rank order.
+    const entities = await this.jobRepository
       .createQueryBuilder('job')
       .leftJoin('job.employer', 'employer')
       .addSelect([
@@ -388,7 +489,7 @@ export class JobService {
         'employer.role',
         'employer.avatarUrl',
         'employer.verificationLevel',
-        'employer.organizationId'
+        'employer.organizationId',
       ])
       .leftJoin('job.postedBy', 'postedBy')
       .addSelect([
@@ -399,83 +500,29 @@ export class JobService {
         'postedBy.role',
         'postedBy.avatarUrl',
         'postedBy.verificationLevel',
-        'postedBy.organizationId'
+        'postedBy.organizationId',
       ])
       .leftJoinAndSelect('job.category', 'category')
       .leftJoinAndSelect('job.jobSkills', 'jobSkills')
       .leftJoinAndSelect('jobSkills.skill', 'skill')
-      .where('job.status = :status', { status })
-      .andWhere('job.isDirectHire = false')
-      .andWhere('(job.endTime IS NULL OR job.endTime >= NOW())')
-      .andWhere('(job.deadline IS NULL OR job.deadline >= NOW())');
+      .where('job.id IN (:...orderedIds)', { orderedIds })
+      .getMany();
 
-    if (employerId) {
-      qb.andWhere('(job.employerId = :employerId OR job.postedById = :employerId)', { employerId });
-    }
+    const byId = new Map(entities.map((e) => [e.id, e]));
+    const data = orderedIds
+      .map((id) => byId.get(id))
+      .filter((j): j is Job => Boolean(j));
 
-    if (provinceCode) {
-      qb.andWhere('job.provinceCode = :provinceCode', { provinceCode });
-    }
-    if (wardCode) {
-      qb.andWhere('job.wardCode = :wardCode', { wardCode });
-    }
-    if (category) {
-      qb.andWhere('job.categoryId = :category', { category });
-    }
-    if (salaryMin) {
-      qb.andWhere('job.salaryPerHour >= :salaryMin', { salaryMin });
-    }
-    if (search) {
-      qb.andWhere(
-        '(job.title ILIKE :search OR job.description ILIKE :search)',
-        { search: `%${search}%` },
-      );
-    }
-    if (filter.jobType) {
-      qb.andWhere('job.jobType = :jobType', { jobType: filter.jobType });
-    }
-
-    let hasLocationFilter = false;
-    if (
-      filter.latitude !== undefined &&
-      filter.longitude !== undefined &&
-      filter.radius !== undefined
-    ) {
-      hasLocationFilter = true;
-      const distanceSql = `(6371 * acos(cos(radians(:latitude)) * cos(radians(job.latitude)) * cos(radians(job.longitude) - radians(:longitude)) + sin(radians(:latitude)) * sin(radians(job.latitude))))`;
-
-      qb.addSelect(`${distanceSql}`, 'distance');
-      qb.andWhere(`${distanceSql} <= :radius`, {
-        latitude: filter.latitude,
-        longitude: filter.longitude,
-        radius: filter.radius,
-      });
-    }
-
-    const allowedSortFields = [
-      'createdAt',
-      'salaryPerHour',
-      'startTime',
-      'title',
-    ];
-    const safeSortBy = allowedSortFields.includes(sortBy)
-      ? sortBy
-      : 'createdAt';
-    qb.orderBy(`job.${safeSortBy}`, sortOrder);
-    qb.skip((page - 1) * limit).take(limit);
-
-    const { entities, raw } = await qb.getRawAndEntities();
-    const total = await qb.getCount();
-
-    const data = entities.map((entity, index) => {
-      const job = entity as any;
-      if (hasLocationFilter && raw[index]?.distance !== undefined) {
-        job.distance = parseFloat(raw[index].distance);
+    if (hasLocationFilter) {
+      for (const job of data) {
+        const distance = distanceMap.get(job.id);
+        if (distance !== undefined) {
+          (job as any).distance = distance;
+        }
       }
-      return job;
-    });
+    }
+
     await this.attachEmployerProfiles(data);
-    this.sortByTrustPriority(data);
 
     return { data, total, page, limit };
   }
@@ -555,41 +602,6 @@ export class JobService {
         employerProfile: profileMap.get(job.employerId) || null,
       });
     }
-  }
-
-  private sortByTrustPriority(jobs: Job[]): void {
-    const badgeWeight: Record<string, number> = {
-      [EmployerBadge.TOP]: 3,
-      [EmployerBadge.TRUSTED]: 2,
-      [EmployerBadge.VERIFIED]: 1,
-      [EmployerBadge.NONE]: 0,
-    };
-    jobs.sort((a, b) => {
-      // 1. Ưu tiên employer đã eKYC lên trước
-      const ekycA =
-        a.employer?.verificationLevel === VerificationLevel.BASIC ||
-        a.employer?.verificationLevel === VerificationLevel.BUSINESS
-          ? 1
-          : 0;
-      const ekycB =
-        b.employer?.verificationLevel === VerificationLevel.BASIC ||
-        b.employer?.verificationLevel === VerificationLevel.BUSINESS
-          ? 1
-          : 0;
-      if (ekycB !== ekycA) return ekycB - ekycA;
-
-      // 2. Ưu tiên tổ chức đã xác thực
-      const pa = (a as any).employerProfile;
-      const pb = (b as any).employerProfile;
-      const verA = pa?.isVerifiedBusiness ? 1 : 0;
-      const verB = pb?.isVerifiedBusiness ? 1 : 0;
-      if (verB !== verA) return verB - verA;
-
-      // 3. Ưu tiên badge cao hơn
-      const badgeA = badgeWeight[pa?.badge] ?? 0;
-      const badgeB = badgeWeight[pb?.badge] ?? 0;
-      return badgeB - badgeA;
-    });
   }
 
   async cancelJob(jobId: string, employerId: string): Promise<Job> {
