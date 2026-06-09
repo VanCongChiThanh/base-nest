@@ -3,6 +3,7 @@ import { ReviewService } from './review.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Review } from './entities';
 import { JobAssignment } from '../job/entities';
+import { WorkerProfile, EmployerProfile } from '../profile/entities';
 import { NotificationHelper } from '../notification';
 import { AssignmentStatus } from '../../common/enums';
 
@@ -27,15 +28,31 @@ describe('ReviewService', () => {
     job: { id: 'j1', employerId: 'u2' },
   };
 
+  const mockRatingQueryBuilder = {
+    select: jest.fn().mockReturnThis(),
+    addSelect: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    getRawOne: jest.fn().mockResolvedValue({ avg: '5', count: '1' }),
+  };
+
   const mockReviewRepo = {
     findOne: jest.fn(),
     findAndCount: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
+    createQueryBuilder: jest.fn(() => mockRatingQueryBuilder),
   };
 
   const mockAssignmentRepo = {
     findOne: jest.fn(),
+  };
+
+  const mockWorkerProfileRepo = {
+    update: jest.fn(),
+  };
+
+  const mockEmployerProfileRepo = {
+    update: jest.fn(),
   };
 
   const mockNotificationHelper = {
@@ -50,6 +67,14 @@ describe('ReviewService', () => {
         {
           provide: getRepositoryToken(JobAssignment),
           useValue: mockAssignmentRepo,
+        },
+        {
+          provide: getRepositoryToken(WorkerProfile),
+          useValue: mockWorkerProfileRepo,
+        },
+        {
+          provide: getRepositoryToken(EmployerProfile),
+          useValue: mockEmployerProfileRepo,
         },
         { provide: NotificationHelper, useValue: mockNotificationHelper },
       ],
