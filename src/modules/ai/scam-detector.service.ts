@@ -22,6 +22,9 @@ interface JobContent {
   address?: string;
   paymentMethod?: string;
   jobType?: string;
+  /** True khi người đăng là cá nhân (không có hồ sơ doanh nghiệp).
+   *  Ảnh hưởng trực tiếp đến: rule no_company_info, AI prompt context. */
+  isPersonalPost?: boolean;
 }
 
 // ─── Rule-based scoring weights ───
@@ -109,7 +112,12 @@ const RULE_CHECKS: Array<{
   },
   {
     name: 'no_company_info',
-    check: (job) => !job.companyName || job.companyName.trim().length < 3,
+    // Only penalise when there is genuinely no poster identity AND it's not a
+    // personal/individual post. Personal posts naturally have a person's name
+    // instead of a company name — that is completely normal on GigWork.
+    check: (job) =>
+      !job.isPersonalPost &&
+      (!job.companyName || job.companyName.trim().length < 3),
     score: 10,
     reason: 'Thiếu thông tin công ty/nhà tuyển dụng',
   },
@@ -154,15 +162,25 @@ Hãy phân tích tin tuyển dụng sau và trả về kết quả định dạn
   "recommendation": "lời khuyên cho người tìm việc"
 }
 
-LƯU Ý QUAN TRỌNG VỀ CÁCH CHẤM ĐIỂM (confidence):
-- Điểm confidence thể hiện MỨC ĐỘ CẢNH BÁO (0 = Rất tốt, 100 = Rất rủi ro).
-- Nền tảng ĐÃ YÊU CẦU XÁC THỰC DANH TÍNH (eKYC) với người đăng, nên KHÔNG DÙNG TỪ NGỮ "lừa đảo", "giả mạo" trừ khi có dấu hiệu cực kỳ rõ ràng (bắt đóng cọc, thu phí).
-- TUY NHIÊN, KHÔNG ĐƯỢC CHẤM ĐIỂM QUÁ THẤP (An toàn) nếu tin đăng cẩu thả. Hãy mạnh dạn tăng điểm confidence (30-60) và đánh giá là KHÔNG ĐẠT CHẤT LƯỢNG nếu có các lỗi sau:
-  + Mô tả công việc quá ngắn, sơ sài, chung chung.
-  + Tên công ty hoặc địa chỉ chứa ký tự rác (như 'fdsf', 'asdf').
-  + Mức lương bất thường (quá cao vô lý hoặc quá thấp).
-- Trả về danh sách 'reasons' liệt kê rõ các điểm trừ về chất lượng trên.
-- Phần recommendation: Luôn đưa ra lời khuyên thực tế. Đặc biệt nếu thanh toán trực tiếp, hãy nhắc nhở ứng viên thỏa thuận rõ ràng và cẩn trọng để tránh rủi ro quỵt lương. Nếu tin có ký tự rác, hãy nhắc ứng viên cẩn thận xác minh lại.
+QUY TẮC BẮT BUỘC — ĐỌC KỸ TRƯỚC KHI PHÂN TÍCH:
+
+1. NGƯỜI ĐĂNG ĐÃ XÁC THỰC eKYC. Không dùng từ "lừa đảo", "giả mạo" trừ khi có dấu hiệu CỰC KỲ rõ ràng (yêu cầu đặt cọc, thu phí, yêu cầu CMND/OTP).
+
+2. PHÂN BIỆT BÀI ĐĂNG CÁ NHÂN VÀ DOANH NGHIỆP:
+   - Nếu trường "Loại người đăng" là "Cá nhân", tên người đăng là TÊN NGƯỜI THẬT (ví dụ: Nguyễn Văn A, Chi Thanh Van Cong...). Đây là HOÀN TOÀN BÌNH THƯỜNG.
+   - TUYỆT ĐỐI KHÔNG đánh giá tên cá nhân người Việt là "không chuyên nghiệp", "ký tự không rõ nghĩa" hay "đáng ngờ". Tên người Việt có thể viết không dấu hoặc lẫn Latin — đây là bình thường.
+   - Với bài đăng cá nhân, KHÔNG yêu cầu phải có tên công ty.
+
+3. CHỈ PHẠT ĐIỂM KHI CÓ DẤU HIỆU THỰC SỰ:
+   - Mô tả công việc quá ngắn, sơ sài, không rõ yêu cầu công việc (< 30 từ).
+   - Địa chỉ chứa ký tự vô nghĩa thực sự (ví dụ: 'fdsf', 'asdf', 'aaaa') — KHÔNG phạt tên địa danh hợp lệ dù ngắn (Lý Sơn, Hà Nội, Q1...).
+   - Mức lương bất thường (quá cao vô lý hoặc quá thấp so với loại việc).
+   - Có yêu cầu đặt cọc, chuyển tiền trước, hoặc thu thập thông tin nhạy cảm.
+
+4. THANH TOÁN P2P (trực tiếp): Với bài đăng cá nhân, P2P là hình thức phổ biến và bình thường. Chỉ cần nhắc nhở nhẹ để ứng viên thỏa thuận rõ ràng — KHÔNG đánh đây là dấu hiệu lừa đảo.
+
+5. reasons: chỉ liệt kê những vấn đề THỰC SỰ có trong bài. Nếu bài ổn, reasons = [].
+6. recommendation: ngắn gọn, thực tế, phù hợp loại bài đăng.
 `;
 
 @Injectable()
@@ -341,10 +359,14 @@ export class ScamDetectorService {
       if (job.paymentMethod === 'P2P') paymentMethodVn = 'Trực tiếp bên ngoài nền tảng (P2P)';
       if (job.paymentMethod === 'ESCROW') paymentMethodVn = 'An toàn qua hệ thống nền tảng (Escrow)';
 
+      const posterLabel = job.isPersonalPost
+        ? `Cá nhân (tên: ${job.companyName || 'Không rõ'})`
+        : `Doanh nghiệp/Tổ chức (tên: ${job.companyName || 'Không rõ'})`;
+
       const jobText = `
+Loại người đăng: ${posterLabel}
 Tiêu đề: ${job.title}
 Mô tả: ${job.description}
-Công ty: ${job.companyName || 'Không rõ'}
 Hình thức công việc: ${jobTypeVn || 'Không rõ'}
 Mức lương: ${job.salaryText || (job.salary ? `${job.salary.toLocaleString()}đ` : 'Không rõ')}
 Hình thức thanh toán: ${paymentMethodVn || 'Không rõ'}

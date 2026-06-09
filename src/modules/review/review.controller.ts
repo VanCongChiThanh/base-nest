@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ReviewService } from './review.service';
 import { CreateReviewDto } from './dto';
-import { CurrentUser } from '../../common/decorators';
+import { CurrentUser, Public } from '../../common/decorators';
 import { User } from '../user/entities';
 
 @Controller('reviews')
@@ -21,6 +21,7 @@ export class ReviewController {
     return this.reviewService.create(user.id, dto);
   }
 
+  @Public()
   @Get('job/:jobId')
   async findByJob(
     @Param('jobId', ParseUUIDPipe) jobId: string,
@@ -30,6 +31,7 @@ export class ReviewController {
     return this.reviewService.findByJob(jobId, page, limit);
   }
 
+  @Public()
   @Get('user/:userId')
   async findByUser(
     @Param('userId', ParseUUIDPipe) userId: string,
