@@ -1,4 +1,5 @@
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEnum } from 'class-validator';
+import { JobCategoryType } from '../entities/job-category.entity';
 
 export class CreateJobCategoryDto {
   @IsString()
@@ -12,4 +13,8 @@ export class CreateJobCategoryDto {
   @IsOptional()
   @IsString()
   icon?: string;
+
+  @IsOptional()
+  @IsEnum(JobCategoryType)
+  type?: JobCategoryType;
 }
