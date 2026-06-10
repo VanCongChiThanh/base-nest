@@ -112,8 +112,8 @@ ${jobDescriptionStr}
         content: row.content,
         similarity: row.similarity,
         skills: row.skill_names || [],
-        rating: row.avg_rating || 0,
-        completedJobs: row.completed_count || 0,
+        rating: Number(row.avg_rating) || 0,
+        completedJobs: Number(row.completed_count) || 0,
         provinceCode: row.province_code,
       };
     });
