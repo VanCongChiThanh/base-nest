@@ -92,9 +92,10 @@ ${jobDescriptionStr}
       `
       SELECT 
         id, node_type, title, content, metadata,
+        owner_id, owner_name, skill_names, province_code, avg_rating, completed_count,
         1 - (embedding <=> $1::vector) AS similarity
       FROM graph_knowledge
-      WHERE node_type = 'worker_service'
+      WHERE node_type = 'worker_service' AND is_active = true
       ORDER BY embedding <=> $1::vector
       LIMIT 20
       `,
@@ -107,17 +108,17 @@ ${jobDescriptionStr}
 
     // 4. Re-rank and score using Gemini
     const candidatesData = searchResult.map((row: any) => {
-      const meta = row.metadata || {};
       return {
         id: row.id,
-        workerId: meta.workerId || meta.id, // Fallback if needed
-        name: row.title,
+        workerId: row.owner_id, 
+        name: row.owner_name || row.title,
+        serviceTitle: row.title,
         content: row.content,
         similarity: row.similarity,
-        skills: meta.skills,
-        rating: meta.ratingAvg,
-        completedJobs: meta.totalJobsCompleted,
-        provinceCode: meta.provinceCode,
+        skills: row.skill_names || [],
+        rating: row.avg_rating || 0,
+        completedJobs: row.completed_count || 0,
+        provinceCode: row.province_code,
       };
     });
 
