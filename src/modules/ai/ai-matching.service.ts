@@ -6,6 +6,7 @@ import { GoogleGenAI } from '@google/genai';
 import { ConfigService } from '@nestjs/config';
 import { NotFoundException } from '../../common/exceptions/business.exception';
 import { JOB_ERRORS } from '../../common/constants/error-codes.constant';
+import { GeminiService } from './gemini.service';
 
 @Injectable()
 export class AiMatchingService {
@@ -17,6 +18,7 @@ export class AiMatchingService {
     private readonly jobRepo: Repository<Job>,
     private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
+    private readonly geminiService: GeminiService,
   ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     this.ai = new GoogleGenAI({ apiKey });
@@ -72,13 +74,7 @@ ${jobDescriptionStr}
     // 2. Embed the search query
     let queryEmbedding: number[] = [];
     try {
-      const embedResponse = await this.ai.models.embedContent({
-        model: 'text-embedding-004',
-        contents: searchQuery,
-      });
-      if (embedResponse.embeddings && embedResponse.embeddings.length > 0) {
-        queryEmbedding = embedResponse.embeddings[0].values || [];
-      }
+      queryEmbedding = await this.geminiService.embedText(searchQuery);
     } catch (error) {
       this.logger.error('Failed to get embeddings for query', error);
       return [];
