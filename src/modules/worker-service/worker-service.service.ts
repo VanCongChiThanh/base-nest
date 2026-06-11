@@ -78,6 +78,7 @@ export class WorkerServiceService {
         'worker.verificationLevel',
       ])
       .leftJoin(WorkerProfile, 'wp', 'wp.user_id = ws.worker_id')
+      .addSelect(['wp.ratingAvg', 'wp.totalJobsCompleted'])
       .leftJoinAndSelect('ws.category', 'category')
       .where('ws.isActive = :isActive', { isActive: true });
 
