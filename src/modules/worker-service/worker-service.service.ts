@@ -77,7 +77,7 @@ export class WorkerServiceService {
         'worker.isEmailVerified',
         'worker.verificationLevel',
       ])
-      .leftJoin('worker_profiles', 'wp', 'wp.user_id = ws.worker_id')
+      .leftJoin(WorkerProfile, 'wp', 'wp.user_id = ws.worker_id')
       .leftJoinAndSelect('ws.category', 'category')
       .where('ws.isActive = :isActive', { isActive: true });
 
@@ -100,8 +100,8 @@ export class WorkerServiceService {
 
     // Surface workers who are available now and well-rated, then most recent.
     qb.orderBy('ws.isAvailableNow', 'DESC')
-      .addOrderBy('wp.rating_avg', 'DESC')
-      .addOrderBy('wp.total_jobs_completed', 'DESC')
+      .addOrderBy('wp.ratingAvg', 'DESC')
+      .addOrderBy('wp.totalJobsCompleted', 'DESC')
       .addOrderBy('ws.createdAt', 'DESC');
     qb.skip((page - 1) * limit).take(limit);
 
