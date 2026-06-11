@@ -339,7 +339,11 @@ export class EscrowService {
       // Logic cho GIG/PART_TIME: Employer duyệt người -> thanh toán
       const application = await this.applicationRepo.findOne({ where: { id: escrow.applicationId } });
       if (application && application.status === ApplicationStatus.PENDING) {
-        await this.jobService.acceptApplication(application.id, escrow.employerId);
+        try {
+          await this.jobService.acceptApplication(application.id, escrow.employerId);
+        } catch (err) {
+          this.logger.error(`Failed to accept application ${application.id} for escrow ${escrow.id}`, err);
+        }
       }
     } else {
       // Logic cho ONLINE: Thông báo cho worker(s) được assign job
@@ -368,8 +372,19 @@ export class EscrowService {
       where: { payosOrderCode: orderCode },
     });
     if (!escrow) throw new NotFoundException(ESCROW_ERRORS.ESCROW_NOT_FOUND);
-    if (escrow.status === EscrowStatus.FUNDED)
+    if (escrow.status === EscrowStatus.FUNDED) {
+      if (escrow.applicationId) {
+        try {
+          const application = await this.applicationRepo.findOne({ where: { id: escrow.applicationId } });
+          if (application && application.status === ApplicationStatus.PENDING) {
+            await this.jobService.acceptApplication(application.id, escrow.employerId);
+          }
+        } catch (err) {
+          this.logger.error(`Failed to retry accept application in sync for escrow ${escrow.id}`, err);
+        }
+      }
       return { status: 'FUNDED', escrowId: escrow.id };
+    }
 
     const payos = this.getPayOSClient();
     try {
