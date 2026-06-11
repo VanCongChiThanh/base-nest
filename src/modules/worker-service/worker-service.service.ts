@@ -13,7 +13,7 @@ import { JobService } from '../job/job.service';
 import { AiSyncCronService } from '../ai/ai-sync-cron.service';
 import { SubscriptionService } from '../subscription';
 import { User } from '../user/entities';
-import { WorkerProfile } from '../profile/entities';
+import { WorkerProfile, EmployerProfile } from '../profile/entities';
 import {
   BadRequestException,
   ForbiddenException,
@@ -31,6 +31,8 @@ export class WorkerServiceService {
     private readonly userRepo: Repository<User>,
     @InjectRepository(WorkerProfile)
     private readonly workerProfileRepo: Repository<WorkerProfile>,
+    @InjectRepository(EmployerProfile)
+    private readonly employerProfileRepo: Repository<EmployerProfile>,
     private readonly aiSyncCronService: AiSyncCronService,
     private readonly jobService: JobService,
     private readonly subscriptionService: SubscriptionService,
@@ -120,18 +122,27 @@ export class WorkerServiceService {
   ): Promise<void> {
     if (!services.length) return;
     const workerIds = [...new Set(services.map((s) => s.workerId))];
-    const profiles = await this.workerProfileRepo.find({
-      where: { userId: In(workerIds) },
-    });
-    const profileMap = new Map(profiles.map((p) => [p.userId, p]));
+    const [workerProfiles, employerProfiles] = await Promise.all([
+      this.workerProfileRepo.find({ where: { userId: In(workerIds) } }),
+      this.employerProfileRepo.find({ where: { userId: In(workerIds) } }),
+    ]);
+    const workerProfileMap = new Map(workerProfiles.map((p) => [p.userId, p]));
+    const employerProfileMap = new Map(employerProfiles.map((p) => [p.userId, p]));
+
     for (const service of services) {
-      const profile = profileMap.get(service.workerId);
+      const wp = workerProfileMap.get(service.workerId);
+      const ep = employerProfileMap.get(service.workerId);
+      // Since recomputeUserRating applies the combined rating to both profiles, 
+      // we can use either one to get the total rating and reviews.
+      const activeProfile = wp || ep;
+
       if (service.worker) {
-        (service.worker as any).workerProfile = profile
+        (service.worker as any).workerProfile = activeProfile
           ? {
-              ratingAvg: Number(profile.ratingAvg) || 0,
-              totalReviews: profile.totalReviews ?? 0,
-              totalJobsCompleted: profile.totalJobsCompleted ?? 0,
+              ratingAvg: Number(activeProfile.ratingAvg) || 0,
+              totalReviews: activeProfile.totalReviews ?? 0,
+              // only worker profile has jobs completed metric
+              totalJobsCompleted: wp?.totalJobsCompleted ?? 0,
             }
           : null;
       }
