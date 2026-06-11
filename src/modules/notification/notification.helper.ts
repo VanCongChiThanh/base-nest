@@ -25,6 +25,7 @@ const TYPE_TO_REF: Partial<Record<NotificationType, ReferenceType>> = {
   [NotificationType.JOB_COMPLETED]: ReferenceType.JOB,
   [NotificationType.JOB_CANCELLED]: ReferenceType.JOB,
   [NotificationType.JOB_CHECKED_IN]: ReferenceType.JOB,
+  [NotificationType.HOURS_LOGGED]: ReferenceType.JOB,
   [NotificationType.APPLICATION_CANCELLED]: ReferenceType.JOB,
   [NotificationType.APPLICATION_MESSAGE]: ReferenceType.JOB_APPLICATION,
   [NotificationType.REVIEW_RECEIVED]: ReferenceType.REVIEW,

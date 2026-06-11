@@ -1034,6 +1034,21 @@ export class JobService {
       },
     );
 
+    if (
+      assignment.job.postedById &&
+      assignment.job.postedById !== assignment.job.employerId
+    ) {
+      await this.notificationHelper.send(
+        assignment.job.postedById,
+        NotificationType.JOB_CHECKED_IN,
+        jobId,
+        {
+          jobTitle: assignment.job.title,
+          applicationId: assignment.applicationId,
+        },
+      );
+    }
+
     return saved;
   }
 
@@ -1088,6 +1103,23 @@ export class JobService {
           applicationId: assignment.applicationId,
         },
       );
+
+      if (
+        assignment.job.postedById &&
+        assignment.job.postedById !== assignment.job.employerId
+      ) {
+        await this.notificationHelper.send(
+          assignment.job.postedById,
+          NotificationType.JOB_COMPLETED,
+          jobId,
+          {
+            jobTitle: assignment.job.title,
+            message:
+              'Người làm đã đánh dấu công việc hoàn thành. Vui lòng kiểm tra và xác nhận thanh toán.',
+            applicationId: assignment.applicationId,
+          },
+        );
+      }
     }
 
     const saved = await this.assignmentRepository.save(assignment);
@@ -1519,13 +1551,29 @@ export class JobService {
         : assignment.workerId;
     await this.notificationHelper.send(
       targetUserId,
-      NotificationType.JOB_COMPLETED,
+      NotificationType.HOURS_LOGGED,
       assignment.jobId,
       {
         jobTitle: assignment.job.title,
         message: `Số giờ thực tế đã làm cho công việc "${assignment.job.title}" là ${loggedHours} giờ. Vui lòng xác nhận.`,
       },
     );
+
+    if (
+      userId === assignment.workerId &&
+      assignment.job.postedById &&
+      assignment.job.postedById !== assignment.job.employerId
+    ) {
+      await this.notificationHelper.send(
+        assignment.job.postedById,
+        NotificationType.HOURS_LOGGED,
+        assignment.jobId,
+        {
+          jobTitle: assignment.job.title,
+          message: `Số giờ thực tế đã làm cho công việc "${assignment.job.title}" là ${loggedHours} giờ. Vui lòng xác nhận.`,
+        },
+      );
+    }
 
     return assignment;
   }
@@ -1674,6 +1722,22 @@ export class JobService {
         applicationId: assignment.applicationId,
       },
     );
+
+    if (
+      assignment.job.postedById &&
+      assignment.job.postedById !== assignment.job.employerId
+    ) {
+      await this.notificationHelper.send(
+        assignment.job.postedById,
+        NotificationType.JOB_COMPLETED,
+        assignment.jobId,
+        {
+          jobTitle: assignment.job.title,
+          message: `Người làm đã xác nhận nhận đủ thanh toán. Công việc "${assignment.job.title}" đã hoàn thành!`,
+          applicationId: assignment.applicationId,
+        },
+      );
+    }
 
     return assignment;
   }
