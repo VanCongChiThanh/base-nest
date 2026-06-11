@@ -211,7 +211,7 @@ export class JobService {
       );
     }
 
-    const isEmployer = job.employerId === userId;
+    const isEmployer = job.employerId === userId || job.postedById === userId;
     const isWorker = application.workerId === userId;
 
     if (!isEmployer && !isWorker) {
@@ -247,7 +247,7 @@ export class JobService {
     workerId: string,
   ): Promise<JobInvitation> {
     const job = await this.findJobById(jobId);
-    if (job.employerId !== employerId) {
+    if (job.employerId !== employerId && job.postedById !== employerId) {
       throw new ForbiddenException(JOB_ERRORS.JOB_INVITE_OWNER_ONLY);
     }
 
@@ -606,7 +606,7 @@ export class JobService {
 
   async cancelJob(jobId: string, employerId: string): Promise<Job> {
     const job = await this.findJobById(jobId);
-    if (job.employerId !== employerId) {
+    if (job.employerId !== employerId && job.postedById !== employerId) {
       throw new ForbiddenException(JOB_ERRORS.JOB_OWNER_FORBIDDEN);
     }
     if (job.status !== JobStatus.OPEN) {
@@ -773,7 +773,7 @@ export class JobService {
     if (!application) {
       throw new NotFoundException(APPLICATION_ERRORS.APPLICATION_NOT_FOUND);
     }
-    if (application.job.employerId !== employerId) {
+    if (application.job.employerId !== employerId && application.job.postedById !== employerId) {
       throw new ForbiddenException(
         APPLICATION_ERRORS.APPLICATION_ACCESS_FORBIDDEN,
       );
@@ -923,7 +923,7 @@ export class JobService {
     if (!application) {
       throw new NotFoundException(APPLICATION_ERRORS.APPLICATION_NOT_FOUND);
     }
-    if (application.job.employerId !== employerId) {
+    if (application.job.employerId !== employerId && application.job.postedById !== employerId) {
       throw new ForbiddenException(
         APPLICATION_ERRORS.APPLICATION_ACCESS_FORBIDDEN,
       );
@@ -1092,7 +1092,7 @@ export class JobService {
       );
     }
 
-    const isEmployer = assignment.job.employerId === userId;
+    const isEmployer = assignment.job.employerId === userId || assignment.job.postedById === userId;
 
     if (isEmployer) {
       assignment.status = AssignmentStatus.PAYMENT_SENT;
@@ -1145,7 +1145,7 @@ export class JobService {
 
   async completeJobByEmployer(jobId: string, employerId: string): Promise<Job> {
     const job = await this.findJobById(jobId);
-    if (job.employerId !== employerId) {
+    if (job.employerId !== employerId && job.postedById !== employerId) {
       throw new ForbiddenException(JOB_ERRORS.JOB_COMPLETE_EMPLOYER_ONLY);
     }
 
@@ -1548,7 +1548,8 @@ export class JobService {
 
     if (
       assignment.workerId !== userId &&
-      assignment.job.employerId !== userId
+      assignment.job.employerId !== userId &&
+      assignment.job.postedById !== userId
     ) {
       throw new ForbiddenException(
         APPLICATION_ERRORS.ASSIGNMENT_NOT_PARTICIPANT,
@@ -1615,7 +1616,8 @@ export class JobService {
 
     if (
       assignment.workerId !== userId &&
-      assignment.job.employerId !== userId
+      assignment.job.employerId !== userId &&
+      assignment.job.postedById !== userId
     ) {
       throw new ForbiddenException(
         APPLICATION_ERRORS.ASSIGNMENT_NOT_PARTICIPANT,
@@ -1661,7 +1663,7 @@ export class JobService {
       );
     }
 
-    if (assignment.job.employerId !== userId) {
+    if (assignment.job.employerId !== userId && assignment.job.postedById !== userId) {
       throw new ForbiddenException(
         APPLICATION_ERRORS.ASSIGNMENT_MARK_PAID_EMPLOYER_ONLY,
       );

@@ -42,7 +42,9 @@ export class ReviewService {
 
     // Reviewer must be the worker or the employer of the job
     const isWorker = assignment.workerId === reviewerId;
-    const isEmployer = assignment.job.employerId === reviewerId;
+    const isEmployer =
+      assignment.job.employerId === reviewerId ||
+      assignment.job.postedById === reviewerId;
 
     if (!isWorker && !isEmployer) {
       throw new ForbiddenException(REVIEW_ERRORS.REVIEW_NOT_ALLOWED);
