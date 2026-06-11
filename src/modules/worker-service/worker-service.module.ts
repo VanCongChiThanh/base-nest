@@ -7,11 +7,16 @@ import { AiModule } from '../ai/ai.module';
 import { JobModule } from '../job/job.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { User } from '../user/entities';
-import { WorkerProfile } from '../profile/entities';
+import { WorkerProfile, EmployerProfile } from '../profile/entities';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([WorkerServiceEntity, User, WorkerProfile]),
+    TypeOrmModule.forFeature([
+      WorkerServiceEntity,
+      User,
+      WorkerProfile,
+      EmployerProfile,
+    ]),
     AiModule,
     forwardRef(() => JobModule),
     SubscriptionModule,
