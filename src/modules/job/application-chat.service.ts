@@ -40,7 +40,8 @@ export class ApplicationChatService {
     }
     const job = application.job;
     const isWorker = application.workerId === userId;
-    const isEmployer = job.employerId === userId;
+    const isEmployer = job.employerId === userId || job.postedById === userId;
+
     if (!isWorker && !isEmployer) {
       throw new ForbiddenException(
         APPLICATION_ERRORS.APPLICATION_ACCESS_FORBIDDEN,
