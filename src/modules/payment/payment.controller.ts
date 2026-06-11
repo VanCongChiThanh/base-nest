@@ -127,6 +127,33 @@ export class PaymentController {
   }
 
   /**
+   * POST /jobs/:jobId/applications/:appId/escrow
+   * Employer thanh toán ký quỹ khi duyệt 1 ứng viên (GIG/PART_TIME)
+   */
+  @Post('jobs/:jobId/applications/:appId/escrow')
+  async createApplicationEscrow(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @Param('appId', ParseUUIDPipe) appId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.escrowService.createApplicationEscrow(user.id, appId);
+  }
+
+  /**
+   * POST /jobs/:jobId/applications/:appId/request-refund
+   * Employer yêu cầu hoàn tiền khi ứng viên hủy/bỏ ngang
+   */
+  @Post('jobs/:jobId/applications/:appId/request-refund')
+  async requestRefund(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @Param('appId', ParseUUIDPipe) appId: string,
+    @CurrentUser() user: User,
+    @Body('reason') reason: string,
+  ) {
+    return this.escrowService.requestRefund(jobId, appId, user.id, reason);
+  }
+
+  /**
    * GET /escrow/job/:jobId
    * Lấy thông tin escrow + danh sách milestones của job
    */
@@ -238,6 +265,20 @@ export class PaymentController {
   }
 
   // ==================== ADMIN: GIẢI NGÂN ====================
+
+  /**
+   * GET /admin/escrows
+   * Lấy danh sách escrows (dùng cho admin quản lý refund)
+   */
+  @Roles(Role.ADMIN)
+  @Get('admin/escrows')
+  async getAdminEscrows(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+  ) {
+    return this.escrowService.getAdminEscrows(page, limit, status);
+  }
 
   /**
    * GET /admin/escrow/milestones

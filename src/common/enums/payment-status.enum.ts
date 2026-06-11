@@ -19,6 +19,7 @@ export enum EscrowStatus {
   FUNDED = 'FUNDED', // Đã ký quỹ đủ tiền
   PARTIALLY_RELEASED = 'PARTIALLY_RELEASED', // Đã giải ngân 1 phần
   FULLY_RELEASED = 'FULLY_RELEASED', // Đã giải ngân toàn bộ
+  REFUND_PENDING = 'REFUND_PENDING', // Yêu cầu hoàn tiền
   REFUNDED = 'REFUNDED', // Hoàn tiền cho employer
   DISPUTED = 'DISPUTED', // Đang tranh chấp
 }

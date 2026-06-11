@@ -8,7 +8,7 @@ import {
   JobAssignment,
   JobInvitation,
 } from './entities';
-import { Escrow } from '../payment/entities';
+import { Escrow, Milestone } from '../payment/entities';
 import { CreateJobDto, ApplyJobDto, JobFilterDto, CheckInJobDto } from './dto';
 import {
   JOB_ERRORS,
@@ -30,6 +30,7 @@ import {
   OnlinePaymentType,
   PaymentMethod,
   EscrowStatus,
+  MilestoneStatus,
 } from '../../common/enums';
 import { JobInvitationStatus } from './entities/job-invitation.entity';
 import { NotificationHelper } from '../notification';
@@ -50,6 +51,7 @@ export interface ApplicationProgress {
   jobTitle: string;
   jobAddress: string;
   jobType: JobType;
+  paymentMethod?: PaymentMethod;
   salaryType: JobSalaryType | null;
   totalBudget: number | null;
   onlinePaymentType: OnlinePaymentType | null;
@@ -91,6 +93,8 @@ export class JobService {
     private readonly workerProfileRepository: Repository<WorkerProfile>,
     @InjectRepository(Escrow)
     private readonly escrowRepository: Repository<Escrow>,
+    @InjectRepository(Milestone)
+    private readonly milestoneRepository: Repository<Milestone>,
     private readonly notificationHelper: NotificationHelper,
     private readonly aiSyncCronService: AiSyncCronService,
   ) {}
@@ -1276,6 +1280,7 @@ export class JobService {
       salaryType: application.job.salaryType,
       totalBudget: application.job.totalBudget,
       onlinePaymentType: application.job.onlinePaymentType,
+      paymentMethod: (application.job as any).paymentMethod,
       startTime:
         application.job.startTime ||
         application.job.deadline ||
@@ -1626,12 +1631,27 @@ export class JobService {
 
     // Check payment method. Note: If paymentMethod isn't explicitly P2P, we default to P2P logic here unless ESCROW is defined.
     // For this boilerplate, assuming P2P flow. If Escrow, we just complete it.
-    if ((assignment.job.paymentMethod as any) === 'ESCROW') {
+    if ((assignment.job.paymentMethod as any) === 'ESCROW' || (assignment.job.paymentMethod as any) === PaymentMethod.ESCROW) {
       assignment.status = AssignmentStatus.COMPLETED;
       assignment.completedAt = new Date();
       assignment.job.status = JobStatus.COMPLETED as any;
       await this.jobRepository.save(assignment.job);
-      // TODO: Call EscrowService.release(jobId, loggedHours) here
+      
+      const application = await this.applicationRepository.findOne({
+        where: { jobId: assignment.jobId, workerId: assignment.workerId },
+        order: { appliedAt: 'DESC' }
+      });
+      if (application) {
+        const escrow = await this.escrowRepository.findOne({
+          where: { jobId: assignment.jobId, applicationId: application.id }
+        });
+        if (escrow) {
+          await this.milestoneRepository.update(
+            { escrowId: escrow.id },
+            { status: MilestoneStatus.APPROVED, approvedAt: new Date() }
+          );
+        }
+      }
     } else {
       assignment.status = AssignmentStatus.PAYMENT_PENDING;
     }
@@ -1675,7 +1695,22 @@ export class JobService {
       assignment.completedAt = new Date();
       assignment.job.status = JobStatus.COMPLETED as any;
       await this.jobRepository.save(assignment.job);
-      // TODO: EscrowService.release should be called here in the future
+      
+      const application = await this.applicationRepository.findOne({
+        where: { jobId, workerId: assignment.workerId },
+        order: { appliedAt: 'DESC' }
+      });
+      if (application) {
+        const escrow = await this.escrowRepository.findOne({
+          where: { jobId, applicationId: application.id }
+        });
+        if (escrow) {
+          await this.milestoneRepository.update(
+            { escrowId: escrow.id },
+            { status: MilestoneStatus.APPROVED, approvedAt: new Date() }
+          );
+        }
+      }
     } else {
       assignment.status = AssignmentStatus.PAYMENT_SENT;
     }
