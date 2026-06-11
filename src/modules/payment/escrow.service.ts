@@ -271,10 +271,10 @@ export class EscrowService {
     try {
       const paymentLinkRes = await payos.paymentRequests.create({
         orderCode,
-        amount: chargeAmount,
-        description: `Ky quy ${job.title}`.substring(0, 25),
-        returnUrl: `${frontendUrl}/jobs/${job.id}`,
-        cancelUrl: `${frontendUrl}/jobs/${job.id}`,
+        amount: Math.round(chargeAmount),
+        description: `Ky quy cong viec`.substring(0, 25),
+        returnUrl: `${frontendUrl}/jobs/${job.id}/escrow/result`,
+        cancelUrl: `${frontendUrl}/jobs/${job.id}/escrow/result`,
       });
 
       savedEscrow.payosPaymentLinkId = paymentLinkRes.paymentLinkId;
