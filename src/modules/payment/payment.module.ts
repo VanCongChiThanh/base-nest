@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PaymentService } from './payment.service';
 import { PaymentController } from './payment.controller';
@@ -7,6 +7,7 @@ import { PaymentConfirmation, Dispute, Escrow, Milestone } from './entities';
 import { Job, JobAssignment, JobApplication } from '../job/entities';
 import { BankAccount, User } from '../user/entities';
 import { NotificationModule } from '../notification';
+import { JobModule } from '../job/job.module';
 import payosConfig from '../../config/payos.config';
 import { ConfigModule } from '@nestjs/config';
 
@@ -25,6 +26,7 @@ import { ConfigModule } from '@nestjs/config';
       User,
     ]),
     NotificationModule,
+    forwardRef(() => JobModule),
   ],
   controllers: [PaymentController],
   providers: [PaymentService, EscrowService],

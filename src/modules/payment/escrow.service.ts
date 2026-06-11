@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PayOS } from '@payos/node';
@@ -28,6 +28,7 @@ import {
   SUBSCRIPTION_ERRORS,
   APPLICATION_ERRORS,
 } from '../../common/constants/error-codes.constant';
+import { JobService } from '../job/job.service';
 import { Escrow, Milestone } from './entities';
 import {
   CreateEscrowDto,
@@ -60,6 +61,8 @@ export class EscrowService {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly notificationHelper: NotificationHelper,
+    @Inject(forwardRef(() => JobService))
+    private readonly jobService: JobService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -336,16 +339,7 @@ export class EscrowService {
       // Logic cho GIG/PART_TIME: Employer duyệt người -> thanh toán
       const application = await this.applicationRepo.findOne({ where: { id: escrow.applicationId } });
       if (application && application.status === ApplicationStatus.PENDING) {
-        application.status = ApplicationStatus.EMPLOYER_ACCEPTED;
-        application.respondedAt = new Date();
-        await this.applicationRepo.save(application);
-
-        await this.notificationHelper.send(
-          application.workerId,
-          NotificationType.JOB_APPLICATION_ACCEPTED,
-          application.id,
-          { jobTitle: escrow.job?.title ?? '', jobId: escrow.jobId, applicationId: application.id },
-        );
+        await this.jobService.acceptApplication(application.id, escrow.employerId);
       }
     } else {
       // Logic cho ONLINE: Thông báo cho worker(s) được assign job
