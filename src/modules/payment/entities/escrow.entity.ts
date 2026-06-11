@@ -27,8 +27,11 @@ export class Escrow {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'job_id', unique: true })
+  @Column({ name: 'job_id' })
   jobId: string;
+
+  @Column({ name: 'application_id', nullable: true, type: 'uuid' })
+  applicationId: string;
 
   @ManyToOne(() => Job, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'job_id' })

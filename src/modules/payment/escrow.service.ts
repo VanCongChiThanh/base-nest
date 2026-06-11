@@ -9,10 +9,11 @@ import {
   NotificationType,
   JobType,
   JobStatus,
+  ApplicationStatus,
   Role,
 } from '../../common/enums';
 import payosConfig from '../../config/payos.config';
-import { Job, JobAssignment } from '../job/entities';
+import { Job, JobAssignment, JobApplication } from '../job/entities';
 import { User } from '../user/entities';
 import { NotificationHelper } from '../notification';
 import {
@@ -25,6 +26,7 @@ import {
   MILESTONE_ERRORS,
   JOB_ERRORS,
   SUBSCRIPTION_ERRORS,
+  APPLICATION_ERRORS,
 } from '../../common/constants/error-codes.constant';
 import { Escrow, Milestone } from './entities';
 import {
@@ -53,6 +55,8 @@ export class EscrowService {
     private readonly jobRepo: Repository<Job>,
     @InjectRepository(JobAssignment)
     private readonly assignmentRepo: Repository<JobAssignment>,
+    @InjectRepository(JobApplication)
+    private readonly applicationRepo: Repository<JobApplication>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly notificationHelper: NotificationHelper,
@@ -184,6 +188,106 @@ export class EscrowService {
     }
   }
 
+  /**
+   * Employer duyệt ứng viên cho job GIG/PART_TIME và tạo escrow
+   * Yêu cầu thanh toán toàn bộ chi phí dự kiến.
+   */
+  async createApplicationEscrow(employerId: string, applicationId: string) {
+    const application = await this.applicationRepo.findOne({
+      where: { id: applicationId },
+      relations: ['job'],
+    });
+    if (!application) throw new NotFoundException(APPLICATION_ERRORS.APPLICATION_NOT_FOUND);
+    const job = application.job;
+    
+    if (job.employerId !== employerId && job.postedById !== employerId) {
+      throw new ForbiddenException(JOB_ERRORS.JOB_OWNER_FORBIDDEN);
+    }
+    if ((job as any).paymentMethod !== 'ESCROW') {
+      throw new BadRequestException({ code: 'ESCROW_INVALID_METHOD', message: 'Chỉ dành cho việc làm có phương thức thanh toán Escrow' } as any);
+    }
+
+    // Tính toán số tiền (tuỳ logic, ta có thể lấy totalBudget / requiredWorkers hoặc totalBudget nếu tuyển 1)
+    // Ở đây dùng totalBudget chia cho requiredWorkers, hoặc tuỳ logic business. 
+    // GIG thường có totalBudget cho toàn job
+    const baseAmount = job.totalBudget ? Number(job.totalBudget) / job.requiredWorkers : 0;
+    if (baseAmount < 1000) {
+      throw new BadRequestException({ code: 'ESCROW_AMOUNT_INVALID', message: 'Ngân sách thanh toán không hợp lệ (nhỏ hơn 1000 VNĐ)' } as any);
+    }
+    const totalAmount = Math.round(baseAmount);
+    const serviceFee = Math.round(totalAmount * SERVICE_FEE_RATE);
+    const chargeAmount = totalAmount + serviceFee;
+
+    // Check existing
+    const existing = await this.escrowRepo.findOne({
+      where: { jobId: job.id, applicationId },
+    });
+    if (existing) {
+      if (existing.status === EscrowStatus.PENDING) {
+        await this.escrowRepo.remove(existing);
+      } else {
+        throw new BadRequestException(ESCROW_ERRORS.ESCROW_ALREADY_EXISTS);
+      }
+    }
+
+    const orderCode = Number(
+      String(Date.now()).slice(-7) +
+        String(Math.floor(Math.random() * 100)).padStart(2, '0'),
+    );
+
+    const escrow = this.escrowRepo.create({
+      jobId: job.id,
+      applicationId,
+      employerId,
+      totalAmount,
+      serviceFee,
+      chargeAmount,
+      releasedAmount: 0,
+      status: EscrowStatus.PENDING,
+      payosOrderCode: orderCode,
+    });
+    const savedEscrow = await this.escrowRepo.save(escrow);
+
+    // Tạo 1 milestone ngầm
+    const milestone = this.milestoneRepo.create({
+      escrowId: savedEscrow.id,
+      orderIndex: 1,
+      title: 'Thanh toán hoàn thành công việc',
+      description: 'Milestone tự động cho việc làm thời vụ',
+      amount: totalAmount,
+      status: MilestoneStatus.PENDING,
+      proposalAccepted: true,
+    });
+    await this.milestoneRepo.save(milestone);
+
+    // Tạo PayOS payment link
+    const payos = this.getPayOSClient();
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+    try {
+      const paymentLinkRes = await payos.paymentRequests.create({
+        orderCode,
+        amount: chargeAmount,
+        description: `Ky quy ${job.title}`.substring(0, 25),
+        returnUrl: `${frontendUrl}/jobs/${job.id}`,
+        cancelUrl: `${frontendUrl}/jobs/${job.id}`,
+      });
+
+      savedEscrow.payosPaymentLinkId = paymentLinkRes.paymentLinkId;
+      savedEscrow.payosCheckoutUrl = paymentLinkRes.checkoutUrl;
+      await this.escrowRepo.save(savedEscrow);
+
+      return {
+        escrowId: savedEscrow.id,
+        checkoutUrl: paymentLinkRes.checkoutUrl,
+      };
+    } catch (error) {
+      this.logger.error('Failed to create PayOS payment link for application escrow', error);
+      await this.escrowRepo.remove(savedEscrow);
+      throw new BadRequestException(ESCROW_ERRORS.ESCROW_PAYOS_ERROR);
+    }
+  }
+
   // ==================== XỬ LÝ WEBHOOK DEPOSIT ====================
 
   /**
@@ -227,17 +331,34 @@ export class EscrowService {
       { status: MilestoneStatus.IN_PROGRESS },
     );
 
-    // Thông báo cho worker(s) được assign job
-    const assignments = await this.assignmentRepo.find({
-      where: { jobId: escrow.jobId },
-    });
-    for (const assignment of assignments) {
-      await this.notificationHelper.send(
-        assignment.workerId,
-        NotificationType.ESCROW_DEPOSITED,
-        escrow.id,
-        { jobTitle: escrow.job?.title ?? '', jobId: escrow.jobId },
-      );
+    if (escrow.applicationId) {
+      // Logic cho GIG/PART_TIME: Employer duyệt người -> thanh toán
+      const application = await this.applicationRepo.findOne({ where: { id: escrow.applicationId } });
+      if (application && application.status === ApplicationStatus.PENDING) {
+        application.status = ApplicationStatus.EMPLOYER_ACCEPTED;
+        application.respondedAt = new Date();
+        await this.applicationRepo.save(application);
+
+        await this.notificationHelper.send(
+          application.workerId,
+          NotificationType.JOB_APPLICATION_ACCEPTED,
+          application.id,
+          { jobTitle: escrow.job?.title ?? '', jobId: escrow.jobId, applicationId: application.id },
+        );
+      }
+    } else {
+      // Logic cho ONLINE: Thông báo cho worker(s) được assign job
+      const assignments = await this.assignmentRepo.find({
+        where: { jobId: escrow.jobId },
+      });
+      for (const assignment of assignments) {
+        await this.notificationHelper.send(
+          assignment.workerId,
+          NotificationType.ESCROW_DEPOSITED,
+          escrow.id,
+          { jobTitle: escrow.job?.title ?? '', jobId: escrow.jobId },
+        );
+      }
     }
 
     this.logger.log(`Escrow ${escrow.id} funded successfully`);
@@ -273,6 +394,33 @@ export class EscrowService {
   }
 
   // ==================== GET ESCROW ====================
+
+  async getAdminEscrows(
+    page: number = 1,
+    limit: number = 10,
+    status?: string,
+  ) {
+    const query = this.escrowRepo
+      .createQueryBuilder('escrow')
+      .leftJoinAndSelect('escrow.job', 'job')
+      .orderBy('escrow.createdAt', 'DESC');
+
+    if (status) {
+      query.andWhere('escrow.status = :status', { status });
+    }
+
+    const [data, total] = await query
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+    };
+  }
 
   async getAdminMilestones(
     page: number = 1,
@@ -528,7 +676,8 @@ export class EscrowService {
     if (
       escrow.status !== EscrowStatus.FUNDED &&
       escrow.status !== EscrowStatus.PARTIALLY_RELEASED &&
-      escrow.status !== EscrowStatus.DISPUTED
+      escrow.status !== EscrowStatus.DISPUTED &&
+      escrow.status !== EscrowStatus.REFUND_PENDING
     ) {
       throw new BadRequestException(ESCROW_ERRORS.ESCROW_CANNOT_REFUND);
     }
@@ -550,6 +699,44 @@ export class EscrowService {
 
     this.logger.log(`Admin ${adminId} refunded escrow ${escrowId}`);
     return { success: true, escrowId };
+  }
+
+  // ==================== EMPLOYER: YÊU CẦU HOÀN TIỀN ====================
+
+  async requestRefund(jobId: string, applicationId: string, employerId: string, reason: string) {
+    const escrow = await this.escrowRepo.findOne({
+      where: { jobId, applicationId },
+      relations: ['job'],
+    });
+    if (!escrow) throw new NotFoundException(ESCROW_ERRORS.ESCROW_NOT_FOUND);
+    if (escrow.employerId !== employerId) {
+      throw new ForbiddenException(JOB_ERRORS.JOB_OWNER_FORBIDDEN);
+    }
+    if (escrow.status !== EscrowStatus.FUNDED) {
+      throw new BadRequestException({ code: 'ESCROW_REFUND_INVALID_STATE', message: 'Chỉ có thể yêu cầu hoàn tiền cho khoản ký quỹ chưa được giải ngân' } as any);
+    }
+
+    escrow.status = EscrowStatus.REFUND_PENDING;
+    await this.escrowRepo.save(escrow);
+
+    // Notify all admins
+    const admins = await this.userRepo.find({ where: { role: Role.ADMIN } });
+    for (const admin of admins) {
+      await this.notificationHelper.send(
+        admin.id,
+        NotificationType.PAYMENT_DISPUTED, // Tái sử dụng notification type
+        escrow.id,
+        {
+          jobTitle: escrow.job?.title ?? '',
+          jobId: escrow.jobId,
+          reason,
+          message: 'Yêu cầu hoàn tiền ký quỹ',
+        },
+      );
+    }
+
+    this.logger.log(`Employer ${employerId} requested refund for escrow ${escrow.id}`);
+    return { success: true, escrowId: escrow.id, status: EscrowStatus.REFUND_PENDING };
   }
 
   // ==================== WORKER: ĐỀ XUẤT MILESTONE ====================
