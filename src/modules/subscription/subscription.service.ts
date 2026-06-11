@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleInit,
+  forwardRef,
+} from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PayOS } from '@payos/node';
@@ -156,7 +162,7 @@ const PLAN_SEEDS: PlanSeed[] = [
 ];
 
 @Injectable()
-export class SubscriptionService {
+export class SubscriptionService implements OnModuleInit {
   private readonly logger = new Logger(SubscriptionService.name);
   private payosClient: PayOS | null = null;
 
@@ -177,6 +183,11 @@ export class SubscriptionService {
     private readonly escrowService: EscrowService,
     private readonly notificationService: NotificationService,
   ) {}
+
+  async onModuleInit() {
+    await this.ensureSeededPlans();
+    this.logger.log('Subscription plans seeded successfully');
+  }
 
   private getPayOSClient(): PayOS {
     if (!this.payosClient) {
@@ -217,8 +228,6 @@ export class SubscriptionService {
   }
 
   async getPublicPlans(scope?: PlanScope) {
-    await this.ensureSeededPlans();
-
     const whereClause: Record<string, unknown> = { isActive: true };
     if (scope && Object.values(PlanScope).includes(scope)) {
       whereClause.scope = scope;
@@ -245,8 +254,6 @@ export class SubscriptionService {
   }
 
   async getEntitlementsForUser(user: User) {
-    await this.ensureSeededPlans();
-
     const roleToScope = this.getScopeByRole(user.role);
     const targetUserId =
       user.role === Role.RECRUITER ? user.organizationId : user.id;
@@ -354,7 +361,6 @@ export class SubscriptionService {
   }
 
   async assignPlan(adminId: string, targetUserId: string, dto: AssignPlanDto) {
-    await this.ensureSeededPlans();
 
     const plan = await this.planRepository.findOne({
       where: { code: dto.planCode, isActive: true },
@@ -393,7 +399,6 @@ export class SubscriptionService {
   }
 
   async createCheckout(userId: string, planCode: PlanCode) {
-    await this.ensureSeededPlans();
 
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
