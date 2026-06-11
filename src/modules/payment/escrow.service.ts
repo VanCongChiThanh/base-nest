@@ -207,10 +207,11 @@ export class EscrowService {
       throw new BadRequestException({ code: 'ESCROW_INVALID_METHOD', message: 'Chỉ dành cho việc làm có phương thức thanh toán Escrow' } as any);
     }
 
-    // Tính toán số tiền (tuỳ logic, ta có thể lấy totalBudget / requiredWorkers hoặc totalBudget nếu tuyển 1)
-    // Ở đây dùng totalBudget chia cho requiredWorkers, hoặc tuỳ logic business. 
-    // GIG thường có totalBudget cho toàn job
-    const baseAmount = job.totalBudget ? Number(job.totalBudget) / job.requiredWorkers : 0;
+    // Tính toán số tiền
+    // Với GIG/PART_TIME: tiền công cho 1 application lưu ở salaryPerHour (nếu là tính theo công/giờ)
+    // Nếu có tổng ngân sách chia đều thì lấy tổng / số lượng
+    const baseAmount = job.salaryPerHour ? Number(job.salaryPerHour) : (job.totalBudget ? Number(job.totalBudget) / job.requiredWorkers : 0);
+    
     if (baseAmount < 1000) {
       throw new BadRequestException({ code: 'ESCROW_AMOUNT_INVALID', message: 'Ngân sách thanh toán không hợp lệ (nhỏ hơn 1000 VNĐ)' } as any);
     }
