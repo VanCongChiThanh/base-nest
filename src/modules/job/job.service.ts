@@ -876,6 +876,23 @@ export class JobService {
       },
     );
 
+    if (
+      application.job.postedById &&
+      application.job.postedById !== application.job.employerId
+    ) {
+      await this.notificationHelper.send(
+        application.job.postedById,
+        NotificationType.JOB_APPLICATION_ACCEPTED,
+        application.id,
+        {
+          jobTitle: application.job.title,
+          applicationId: application.id,
+          jobId: application.jobId,
+          message: 'Ứng viên đã đồng ý nhận việc. Công việc hiện đã bắt đầu!',
+        },
+      );
+    }
+
     if (acceptedCount + 1 >= application.job.requiredWorkers) {
       await this.jobRepository.update(application.jobId, {
         status: JobStatus.CLOSED,
@@ -1186,7 +1203,7 @@ export class JobService {
 
     // Auth: only worker of this app or employer of this job can see progress
     const isWorker = application.workerId === callerId;
-    const isEmployer = application.job.employerId === callerId;
+    const isEmployer = application.job.employerId === callerId || application.job.postedById === callerId;
     if (!isWorker && !isEmployer) {
       throw new ForbiddenException(
         APPLICATION_ERRORS.APPLICATION_ACCESS_FORBIDDEN,
@@ -1292,7 +1309,7 @@ export class JobService {
     employerId: string,
   ): Promise<{ total: number; workers: ApplicationProgress[] }> {
     const job = await this.findJobById(jobId);
-    if (job.employerId !== employerId) {
+    if (job.employerId !== employerId && job.postedById !== employerId) {
       throw new ForbiddenException(JOB_ERRORS.JOB_OWNER_FORBIDDEN);
     }
 
