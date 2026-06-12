@@ -966,7 +966,7 @@ export class JobService {
     limit: number;
   }> {
     const job = await this.findJobById(jobId);
-    if (job.employerId !== employerId) {
+    if (job.employerId !== employerId && job.postedById !== employerId) {
       throw new ForbiddenException(JOB_ERRORS.JOB_OWNER_FORBIDDEN);
     }
 
