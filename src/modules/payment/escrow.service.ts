@@ -466,7 +466,7 @@ export class EscrowService {
     const job = await this.jobRepo.findOne({ where: { id: jobId } });
     if (!job) throw new NotFoundException(JOB_ERRORS.JOB_NOT_FOUND);
 
-    const isEmployer = job.employerId === requesterId;
+    const isEmployer = job.employerId === requesterId || (job as any).postedById === requesterId;
     const assignment = await this.assignmentRepo.findOne({
       where: { jobId, workerId: requesterId },
     });
