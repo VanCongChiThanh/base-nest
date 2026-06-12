@@ -281,7 +281,17 @@ export class PaymentService {
         notifyUserId,
         NotificationType.PAYMENT_DISPUTED,
         saved.id,
-        { jobTitle: job.title },
+        { jobTitle: job.title, reason: dto.reason, jobId: job.id },
+      );
+    }
+    
+    // Also notify postedById if applicable and it's not the employer filing the dispute
+    if (!isEmployer && job.postedById && job.postedById !== job.employerId) {
+      await this.notificationHelper.send(
+        job.postedById,
+        NotificationType.PAYMENT_DISPUTED,
+        saved.id,
+        { jobTitle: job.title, reason: dto.reason, jobId: job.id },
       );
     }
 

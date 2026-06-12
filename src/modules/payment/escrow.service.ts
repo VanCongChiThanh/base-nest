@@ -944,6 +944,25 @@ export class EscrowService {
       );
     }
 
+    // Notify the employer and postedById
+    const job = milestone.escrow?.job;
+    if (job) {
+      await this.notificationHelper.send(
+        job.employerId,
+        NotificationType.PAYMENT_DISPUTED,
+        milestoneId,
+        { jobTitle: job.title, reason: 'Chưa nhận được tiền', jobId: job.id },
+      );
+      if (job.postedById && job.postedById !== job.employerId) {
+        await this.notificationHelper.send(
+          job.postedById,
+          NotificationType.PAYMENT_DISPUTED,
+          milestoneId,
+          { jobTitle: job.title, reason: 'Chưa nhận được tiền', jobId: job.id },
+        );
+      }
+    }
+
     this.logger.log(
       `Worker ${workerId} reported milestone ${milestoneId} not received`,
     );
