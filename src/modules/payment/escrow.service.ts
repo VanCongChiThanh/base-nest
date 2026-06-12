@@ -93,7 +93,7 @@ export class EscrowService {
   async createEscrow(employerId: string, dto: CreateEscrowDto) {
     const job = await this.jobRepo.findOne({ where: { id: dto.jobId } });
     if (!job) throw new NotFoundException(JOB_ERRORS.JOB_NOT_FOUND);
-    if (job.employerId !== employerId) {
+    if (job.employerId !== employerId && job.postedById !== employerId) {
       throw new ForbiddenException(JOB_ERRORS.JOB_OWNER_FORBIDDEN);
     }
     if (job.jobType !== JobType.ONLINE) {
@@ -552,7 +552,7 @@ export class EscrowService {
     });
     if (!milestone)
       throw new NotFoundException(MILESTONE_ERRORS.MILESTONE_NOT_FOUND);
-    if (milestone.escrow.employerId !== employerId) {
+    if (milestone.escrow.job.employerId !== employerId && milestone.escrow.job.postedById !== employerId) {
       throw new ForbiddenException(MILESTONE_ERRORS.MILESTONE_ACCESS_FORBIDDEN);
     }
     if (milestone.status !== MilestoneStatus.SUBMITTED) {
@@ -719,7 +719,7 @@ export class EscrowService {
       relations: ['job'],
     });
     if (!escrow) throw new NotFoundException(ESCROW_ERRORS.ESCROW_NOT_FOUND);
-    if (escrow.employerId !== employerId) {
+    if (escrow.job.employerId !== employerId && escrow.job.postedById !== employerId) {
       throw new ForbiddenException(JOB_ERRORS.JOB_OWNER_FORBIDDEN);
     }
     if (escrow.status !== EscrowStatus.FUNDED) {
@@ -812,11 +812,11 @@ export class EscrowService {
   ) {
     const milestone = await this.milestoneRepo.findOne({
       where: { id: milestoneId },
-      relations: ['escrow'],
+      relations: ['escrow', 'escrow.job'],
     });
     if (!milestone)
       throw new NotFoundException(MILESTONE_ERRORS.MILESTONE_NOT_FOUND);
-    if (milestone.escrow.employerId !== employerId) {
+    if (milestone.escrow.job.employerId !== employerId && milestone.escrow.job.postedById !== employerId) {
       throw new ForbiddenException(MILESTONE_ERRORS.MILESTONE_ACCESS_FORBIDDEN);
     }
     if (!milestone.proposedByWorker || milestone.proposalAccepted) {
