@@ -196,20 +196,16 @@ export class EkycService {
       qualityFront?.final_result?.blurred_likelihood === 'likely' ||
       qualityBack?.final_result?.blurred_likelihood === 'likely'
     ) {
-      this.logger.error(`OCR quality: Image is blurred likelihood`, { qualityFront, qualityBack });
-      throw new BadRequestException(
-        'Hình ảnh giấy tờ bị mờ. Vui lòng chụp lại cho rõ viền và chữ.',
-      );
+      this.logger.warn(`OCR quality: Image is blurred likelihood`, { qualityFront, qualityBack });
+      // Bỏ throw exception vì OCR vẫn có thể đọc được dữ liệu hợp lệ
     }
 
     if (
       qualityFront?.final_result?.bad_luminance_likelihood === 'likely' ||
       qualityBack?.final_result?.bad_luminance_likelihood === 'likely'
     ) {
-      this.logger.error(`OCR quality: Bad luminance likelihood`, { qualityFront, qualityBack });
-      throw new BadRequestException(
-        'Lỗi ánh sáng (quá chói hoặc quá tối). Vui lòng chụp lại giấy tờ.',
-      );
+      this.logger.warn(`OCR quality: Bad luminance likelihood`, { qualityFront, qualityBack });
+      // Bỏ throw exception vì OCR vẫn có thể đọc được dữ liệu hợp lệ
     }
 
     const ocrValid = ocr.valid;

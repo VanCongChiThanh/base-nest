@@ -23,7 +23,7 @@ interface QueryAnalysis {
 
 const INTENT_CACHE_PREFIX = 'chatbot:intent:';
 const INTENT_CACHE_TTL = 60 * 60 * 24; // 24h
-const INTENT_LLM_TIMEOUT_MS = 8000;
+const INTENT_LLM_TIMEOUT_MS = 12000; // Tăng từ 8s lên 12s để giảm tỷ lệ timeout fallback
 
 // Score gap threshold to declare a node-type "dominant" in vector search.
 // If top score for a type beats the other type by this margin → exclusive.
