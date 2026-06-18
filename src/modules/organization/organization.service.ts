@@ -3,9 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Job } from '../job/entities/job.entity';
 import { JobApplication } from '../job/entities/job-application.entity';
+import { JobAssignment } from '../job/entities/job-assignment.entity';
 import { PaymentConfirmation } from '../payment/entities/payment-confirmation.entity';
 import { Escrow } from '../payment/entities/escrow.entity';
-import { JobStatus, PaymentStatus, EscrowStatus } from '../../common/enums';
+import { JobStatus, PaymentStatus, EscrowStatus, JobSalaryType } from '../../common/enums';
 
 @Injectable()
 export class OrganizationService {
@@ -14,6 +15,8 @@ export class OrganizationService {
     private readonly jobRepo: Repository<Job>,
     @InjectRepository(JobApplication)
     private readonly applicationRepo: Repository<JobApplication>,
+    @InjectRepository(JobAssignment)
+    private readonly assignmentRepo: Repository<JobAssignment>,
     @InjectRepository(PaymentConfirmation)
     private readonly paymentRepo: Repository<PaymentConfirmation>,
     @InjectRepository(Escrow)
@@ -77,9 +80,10 @@ export class OrganizationService {
       relations: ['job'],
     });
 
-    const totalPaymentSpent = confirmedPayments.reduce((acc, p) => {
-      return acc + this.getJobPaymentAmount(p.job);
-    }, 0);
+    let totalPaymentSpent = 0;
+    for (const p of confirmedPayments) {
+      totalPaymentSpent += await this.getJobPaymentAmount(p);
+    }
 
     const totalEscrowSpent = escrowSpentResult?.total ? Number(escrowSpentResult.total) : 0;
 
@@ -117,18 +121,20 @@ export class OrganizationService {
       order: { createdAt: 'DESC' },
     });
 
-    const paymentTransactions = payments.map((p) => {
-      const realAmount = this.getJobPaymentAmount(p.job);
-      return {
-        id: p.id,
-        date: p.createdAt.toISOString().split('T')[0],
-        description: `Thanh toán - ${p.job?.title ?? 'N/A'}`,
-        amount: -realAmount,
-        status: p.status,
-        type: p.type,
-        createdAt: p.createdAt,
-      };
-    });
+    const paymentTransactions = await Promise.all(
+      payments.map(async (p) => {
+        const realAmount = await this.getJobPaymentAmount(p);
+        return {
+          id: p.id,
+          date: p.createdAt.toISOString().split('T')[0],
+          description: `Thanh toán - ${p.job?.title ?? 'N/A'}`,
+          amount: -realAmount,
+          status: p.status,
+          type: p.type,
+          createdAt: p.createdAt,
+        };
+      })
+    );
 
     // --- Gộp + sắp xếp theo thời gian mới nhất ---
     const allTransactions = [...escrowTransactions, ...paymentTransactions]
@@ -140,21 +146,35 @@ export class OrganizationService {
   }
 
   /**
-   * Lấy số tiền thanh toán thực tế từ Job.
-   * - GIG/PART_TIME: salaryPerHour (dùng cho cả khoán lẫn theo giờ)
+   * Lấy số tiền thanh toán thực tế từ PaymentConfirmation & Job.
    * - ONLINE FIXED_PRICE: totalBudget
-   * - Fallback: payment.amount (nếu đã được set)
+   * - GIG/PART_TIME (HOURLY): salaryPerHour * loggedHours
+   * - GIG/PART_TIME (FIXED): salaryPerHour
    */
-  private getJobPaymentAmount(job: Job | null): number {
-    if (!job) return 0;
-    // Ưu tiên totalBudget (online fixed price), sau đó salaryPerHour (gig/khoán)
+  private async getJobPaymentAmount(payment: PaymentConfirmation): Promise<number> {
+    const job = payment.job;
+    if (!job) return Number(payment.amount) || 0;
+    
+    // Ưu tiên totalBudget (online fixed price)
     if (job.totalBudget && Number(job.totalBudget) > 0) {
       return Number(job.totalBudget);
     }
+
+    // Nếu có salaryPerHour
     if (job.salaryPerHour && Number(job.salaryPerHour) > 0) {
+      // Nếu là job theo giờ, phải nhân với số giờ đã chốt (loggedHours)
+      if (job.salaryType === JobSalaryType.HOURLY) {
+        const assignment = await this.assignmentRepo.findOne({
+          where: { jobId: job.id, workerId: payment.workerId }
+        });
+        const hours = assignment?.loggedHours ? Number(assignment.loggedHours) : 0;
+        return Number(job.salaryPerHour) * hours;
+      }
+      // Nếu là job khoán
       return Number(job.salaryPerHour);
     }
-    return 0;
+    
+    return Number(payment.amount) || 0;
   }
 }
 
