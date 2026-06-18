@@ -47,47 +47,89 @@ export class OrganizationService {
   }
 
   async getFinanceStats(organizationId: string) {
+    // --- Escrow balance (tiền đang giữ trong escrow) ---
     const escrows = await this.escrowRepo.find({
       where: { employerId: organizationId },
     });
     
-    // Balance is total funded minus released minus refunded.
-    const balance = escrows.reduce((acc, curr) => {
+    const escrowBalance = escrows.reduce((acc, curr) => {
       if (curr.status === EscrowStatus.FUNDED || curr.status === EscrowStatus.PARTIALLY_RELEASED) {
         return acc + (Number(curr.totalAmount) - Number(curr.releasedAmount));
       }
       return acc;
     }, 0);
 
-    const monthlySpentResult = await this.escrowRepo
+    // --- Tổng chi qua Escrow ---
+    const escrowSpentResult = await this.escrowRepo
       .createQueryBuilder('escrow')
       .select('SUM(escrow.totalAmount)', 'total')
       .where('escrow.employerId = :organizationId', { organizationId })
-      .andWhere('escrow.status IN (:...statuses)', { statuses: [EscrowStatus.FUNDED, EscrowStatus.PARTIALLY_RELEASED, EscrowStatus.FULLY_RELEASED] })
+      .andWhere('escrow.status IN (:...statuses)', {
+        statuses: [EscrowStatus.FUNDED, EscrowStatus.PARTIALLY_RELEASED, EscrowStatus.FULLY_RELEASED],
+      })
       .getRawOne();
 
+    // --- Tổng chi qua PaymentConfirmation (thanh toán trực tiếp) ---
+    const paymentSpentResult = await this.paymentRepo
+      .createQueryBuilder('payment')
+      .select('SUM(payment.amount)', 'total')
+      .where('payment.employerId = :organizationId', { organizationId })
+      .andWhere('payment.status = :status', { status: PaymentStatus.PAYMENT_CONFIRMED })
+      .getRawOne();
+
+    const totalEscrowSpent = escrowSpentResult?.total ? Number(escrowSpentResult.total) : 0;
+    const totalPaymentSpent = paymentSpentResult?.total ? Number(paymentSpentResult.total) : 0;
+
     return {
-      balance: balance,
-      monthlySpent: monthlySpentResult?.total ? Number(monthlySpentResult.total) : 0,
+      balance: escrowBalance,
+      totalEscrowSpent,
+      totalPaymentSpent,
+      totalSpent: totalEscrowSpent + totalPaymentSpent,
       monthlySubscription: 2500000, // Mock fixed subscription for layout
     };
   }
 
   async getTransactions(organizationId: string) {
+    // --- Lấy Escrow transactions ---
     const escrows = await this.escrowRepo.find({
       where: { employerId: organizationId },
       relations: ['job'],
       order: { createdAt: 'DESC' },
-      take: 10,
     });
 
-    return escrows.map((e) => ({
+    const escrowTransactions = escrows.map((e) => ({
       id: e.id,
       date: e.createdAt.toISOString().split('T')[0],
-      description: `Thanh toán Escrow - ${e.job.title}`,
+      description: `Ký quỹ Escrow - ${e.job?.title ?? 'N/A'}`,
       amount: -Number(e.totalAmount),
       status: e.status,
       type: 'Escrow',
+      createdAt: e.createdAt,
     }));
+
+    // --- Lấy PaymentConfirmation transactions ---
+    const payments = await this.paymentRepo.find({
+      where: { employerId: organizationId },
+      relations: ['job'],
+      order: { createdAt: 'DESC' },
+    });
+
+    const paymentTransactions = payments.map((p) => ({
+      id: p.id,
+      date: p.createdAt.toISOString().split('T')[0],
+      description: `Thanh toán - ${p.job?.title ?? 'N/A'}`,
+      amount: -Number(p.amount),
+      status: p.status,
+      type: p.type,
+      createdAt: p.createdAt,
+    }));
+
+    // --- Gộp + sắp xếp theo thời gian mới nhất ---
+    const allTransactions = [...escrowTransactions, ...paymentTransactions]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 20);
+
+    // Loại bỏ field createdAt khỏi response
+    return allTransactions.map(({ createdAt, ...rest }) => rest);
   }
 }
