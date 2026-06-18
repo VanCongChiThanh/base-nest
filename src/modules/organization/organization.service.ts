@@ -69,16 +69,19 @@ export class OrganizationService {
       })
       .getRawOne();
 
-    // --- Tổng chi qua PaymentConfirmation (thanh toán trực tiếp) ---
-    const paymentSpentResult = await this.paymentRepo
-      .createQueryBuilder('payment')
-      .select('SUM(payment.amount)', 'total')
-      .where('payment.employerId = :organizationId', { organizationId })
-      .andWhere('payment.status = :status', { status: PaymentStatus.PAYMENT_CONFIRMED })
-      .getRawOne();
+    // --- Tổng chi qua PaymentConfirmation (thanh toán trực tiếp P2P) ---
+    // PaymentConfirmation.amount thường = 0 (không được set khi tạo),
+    // nên phải lấy tiền từ Job (salaryPerHour hoặc totalBudget).
+    const confirmedPayments = await this.paymentRepo.find({
+      where: { employerId: organizationId, status: PaymentStatus.PAYMENT_CONFIRMED },
+      relations: ['job'],
+    });
+
+    const totalPaymentSpent = confirmedPayments.reduce((acc, p) => {
+      return acc + this.getJobPaymentAmount(p.job);
+    }, 0);
 
     const totalEscrowSpent = escrowSpentResult?.total ? Number(escrowSpentResult.total) : 0;
-    const totalPaymentSpent = paymentSpentResult?.total ? Number(paymentSpentResult.total) : 0;
 
     return {
       balance: escrowBalance,
@@ -114,15 +117,18 @@ export class OrganizationService {
       order: { createdAt: 'DESC' },
     });
 
-    const paymentTransactions = payments.map((p) => ({
-      id: p.id,
-      date: p.createdAt.toISOString().split('T')[0],
-      description: `Thanh toán - ${p.job?.title ?? 'N/A'}`,
-      amount: -Number(p.amount),
-      status: p.status,
-      type: p.type,
-      createdAt: p.createdAt,
-    }));
+    const paymentTransactions = payments.map((p) => {
+      const realAmount = this.getJobPaymentAmount(p.job);
+      return {
+        id: p.id,
+        date: p.createdAt.toISOString().split('T')[0],
+        description: `Thanh toán - ${p.job?.title ?? 'N/A'}`,
+        amount: -realAmount,
+        status: p.status,
+        type: p.type,
+        createdAt: p.createdAt,
+      };
+    });
 
     // --- Gộp + sắp xếp theo thời gian mới nhất ---
     const allTransactions = [...escrowTransactions, ...paymentTransactions]
@@ -132,4 +138,23 @@ export class OrganizationService {
     // Loại bỏ field createdAt khỏi response
     return allTransactions.map(({ createdAt, ...rest }) => rest);
   }
+
+  /**
+   * Lấy số tiền thanh toán thực tế từ Job.
+   * - GIG/PART_TIME: salaryPerHour (dùng cho cả khoán lẫn theo giờ)
+   * - ONLINE FIXED_PRICE: totalBudget
+   * - Fallback: payment.amount (nếu đã được set)
+   */
+  private getJobPaymentAmount(job: Job | null): number {
+    if (!job) return 0;
+    // Ưu tiên totalBudget (online fixed price), sau đó salaryPerHour (gig/khoán)
+    if (job.totalBudget && Number(job.totalBudget) > 0) {
+      return Number(job.totalBudget);
+    }
+    if (job.salaryPerHour && Number(job.salaryPerHour) > 0) {
+      return Number(job.salaryPerHour);
+    }
+    return 0;
+  }
 }
+
