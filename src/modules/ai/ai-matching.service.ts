@@ -171,7 +171,7 @@ Return ONLY the JSON array, without any markdown formatting like \`\`\`json.
         };
       });
 
-      return finalResult.filter((c: any) => c.workerId);
+      return finalResult.filter((c: any) => c.workerId && c.matchScore >= 30);
     } catch (e) {
       this.logger.error('Failed to parse Gemini rerank response', e);
 
@@ -187,7 +187,7 @@ Return ONLY the JSON array, without any markdown formatting like \`\`\`json.
         totalJobsCompleted: c.completedJobs || 0,
         isAvailable: true,
         profileUrl: `/workers/${c.workerId}`,
-      }));
+      })).filter((c: any) => c.matchScore >= 30);
     }
   }
 }
