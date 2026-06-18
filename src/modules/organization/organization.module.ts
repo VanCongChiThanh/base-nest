@@ -4,6 +4,7 @@ import { OrganizationService } from './organization.service';
 import { OrganizationController } from './organization.controller';
 import { Job } from '../job/entities/job.entity';
 import { JobApplication } from '../job/entities/job-application.entity';
+import { JobAssignment } from '../job/entities/job-assignment.entity';
 import { PaymentConfirmation } from '../payment/entities/payment-confirmation.entity';
 import { Escrow } from '../payment/entities/escrow.entity';
 
@@ -12,6 +13,7 @@ import { Escrow } from '../payment/entities/escrow.entity';
     TypeOrmModule.forFeature([
       Job,
       JobApplication,
+      JobAssignment,
       PaymentConfirmation,
       Escrow,
     ]),

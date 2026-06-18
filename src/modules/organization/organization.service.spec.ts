@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OrganizationService } from './organization.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Job, JobApplication } from '../job/entities';
+import { Job, JobApplication, JobAssignment } from '../job/entities';
 import { PaymentConfirmation, Escrow } from '../payment/entities';
 
 describe('OrganizationService', () => {
@@ -17,6 +17,10 @@ describe('OrganizationService', () => {
         },
         {
           provide: getRepositoryToken(JobApplication),
+          useValue: {},
+        },
+        {
+          provide: getRepositoryToken(JobAssignment),
           useValue: {},
         },
         {
