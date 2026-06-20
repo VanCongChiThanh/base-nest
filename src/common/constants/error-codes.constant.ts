@@ -106,6 +106,10 @@ export const USER_ERRORS = {
     code: 'USER_BANK_NOT_FOUND',
     message: 'Bank account not found',
   },
+  USER_CCCD_ALREADY_EXISTS: {
+    code: 'USER_CCCD_ALREADY_EXISTS',
+    message: 'CCCD đã được xác thực',
+  },
 } as const;
 
 // ==================== PERMISSION ====================

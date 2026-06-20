@@ -9,6 +9,7 @@ import type { ConfigType } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createPublicKey, verify as verifySignature } from 'node:crypto';
 import { Repository } from 'typeorm';
+import { ERROR_CODES } from '../../common/constants';
 import { VerificationLevel, VerificationStatus } from '../../common/enums';
 import ekycConfig from '../../config/ekyc.config';
 import { User } from '../user/entities';
@@ -227,12 +228,27 @@ export class EkycService {
 
     const existingEkyc = await this.ekycResultRepository.findOne({
       where: { idNumber },
+      relations: ['user'],
     });
 
-    if (existingEkyc && existingEkyc.userId !== userId) {
-      throw new BadRequestException(
-        'Số CCCD/CMND này đã được sử dụng để xác thực cho một tài khoản khác.',
-      );
+    if (existingEkyc) {
+      const email = existingEkyc.user?.email || '';
+      const [name, domain] = email.split('@');
+      let maskedEmail = email;
+      
+      if (name && domain) {
+        if (name.length <= 3) {
+          maskedEmail = `${name}***@${domain}`;
+        } else {
+          const firstChars = name.substring(0, 3);
+          maskedEmail = `${firstChars}***@${domain}`;
+        }
+      }
+      
+      throw new BadRequestException({
+        code: ERROR_CODES.USER_CCCD_ALREADY_EXISTS.code,
+        message: `CCCD đã được xác thực cho tài khoản ${maskedEmail}`
+      });
     }
 
     // ─── Save EkycResult (OCR data in dedicated table) ───
