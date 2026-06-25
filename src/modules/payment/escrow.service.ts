@@ -2,7 +2,7 @@ import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PayOS } from '@payos/node';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import {
   EscrowStatus,
   MilestoneStatus,
@@ -453,6 +453,55 @@ export class EscrowService {
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();
+
+    const missingWorkerAppIds = data
+      .filter((m) => !m.worker && m.escrow?.applicationId)
+      .map((m) => m.escrow.applicationId);
+
+    if (missingWorkerAppIds.length > 0) {
+      const applications = await this.applicationRepo.find({
+        where: { id: In(missingWorkerAppIds) },
+        relations: ['worker', 'worker.bankAccounts'],
+      });
+      const appMap = new Map(applications.map((app) => [app.id, app]));
+
+      for (const milestone of data) {
+        if (!milestone.worker && milestone.escrow?.applicationId) {
+          const app = appMap.get(milestone.escrow.applicationId);
+          if (app?.worker) {
+            milestone.workerId = app.worker.id;
+            milestone.worker = app.worker;
+          }
+        }
+      }
+    }
+
+    // Handle Direct Hire without applicationId
+    const directHireJobsWithoutWorker = data.filter(
+      (m) =>
+        !m.worker &&
+        !m.escrow?.applicationId &&
+        m.escrow?.job?.isDirectHire &&
+        (m.escrow?.job as any).targetWorkerId,
+    );
+
+    if (directHireJobsWithoutWorker.length > 0) {
+      const workerIds = directHireJobsWithoutWorker.map((m) => (m.escrow?.job as any).targetWorkerId);
+      const users = await this.escrowRepo.manager.getRepository(User).find({
+        where: { id: In(workerIds) },
+        relations: ['bankAccounts'],
+      });
+      const userMap = new Map(users.map((u) => [u.id, u]));
+
+      for (const milestone of directHireJobsWithoutWorker) {
+        const workerId = (milestone.escrow?.job as any).targetWorkerId;
+        const worker = userMap.get(workerId);
+        if (worker) {
+          milestone.workerId = worker.id;
+          milestone.worker = worker;
+        }
+      }
+    }
 
     return {
       data,
