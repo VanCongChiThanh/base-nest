@@ -413,6 +413,8 @@ export class EscrowService {
     const query = this.escrowRepo
       .createQueryBuilder('escrow')
       .leftJoinAndSelect('escrow.job', 'job')
+      .leftJoinAndSelect('escrow.employer', 'employer')
+      .leftJoinAndSelect('employer.bankAccounts', 'bankAccounts')
       .orderBy('escrow.createdAt', 'DESC');
 
     if (status) {
