@@ -985,6 +985,12 @@ export class JobService {
         'assignment',
         'assignment.applicationId = app.id',
       )
+      .leftJoinAndMapOne(
+        'app.escrow',
+        'Escrow',
+        'escrow',
+        'escrow.applicationId = app.id',
+      )
       .where('app.jobId = :jobId', { jobId })
       .orderBy('app.appliedAt', 'DESC')
       .skip((page - 1) * limit)
